@@ -9,6 +9,8 @@ services:
     envVars:
       - key: NODE_ENV
         value: production
+      - key: ANTHROPIC_API_KEY
+        sync: false
       - key: GUARDIAN_API_KEY
         sync: false
       - key: KALSHI_API_KEY_ID

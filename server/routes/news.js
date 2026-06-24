@@ -1,6 +1,8 @@
 const express = require('express');
 const axios = require('axios');
 const { withCache } = require('../middleware/cache');
+const { scrapeAll } = require('../lib/scraper');
+const { buildStoryCards } = require('../lib/cluster');
 
 const router = express.Router();
 
@@ -133,5 +135,43 @@ function getMockNews() {
     { title: 'Tennis: Swiatek Cruises to French Open Defense', source: 'The Guardian', url: '#', publishedAt: new Date(Date.now() - 39600000).toISOString(), sport_tag: 'Tennis', description: 'Iga Swiatek dominates clay season en route to defending her Roland Garros title.' },
   ];
 }
+
+// ── Scraped feed routes ───────────────────────────────────────────────────────
+
+async function getScrapedStoryCards() {
+  return withCache('story_cards', async () => {
+    const [articles, markets] = await Promise.all([
+      scrapeAll(),
+      getKalshiMarketsForEnrichment(),
+    ]);
+    return buildStoryCards(articles, markets);
+  }, 600); // 10 min — matches scraper cache
+}
+
+// GET /api/news/feed?sport=NBA&limit=20
+router.get('/feed', async (req, res) => {
+  try {
+    const sport = req.query.sport || null;
+    const limit = Math.min(parseInt(req.query.limit) || 20, 50);
+    let cards = await getScrapedStoryCards();
+    if (sport && sport !== 'All') cards = cards.filter(c => c.sport_tag === sport);
+    res.json({ cards: cards.slice(0, limit), total: cards.length });
+  } catch (err) {
+    console.error('News feed error:', err.message);
+    res.status(502).json({ error: 'Failed to fetch news feed', cards: [] });
+  }
+});
+
+// GET /api/news/all?limit=30
+router.get('/all', async (req, res) => {
+  try {
+    const limit = Math.min(parseInt(req.query.limit) || 30, 100);
+    const cards = await getScrapedStoryCards();
+    res.json({ cards: cards.slice(0, limit), total: cards.length });
+  } catch (err) {
+    console.error('News all error:', err.message);
+    res.status(502).json({ error: 'Failed to fetch all news', cards: [] });
+  }
+});
 
 module.exports = router;

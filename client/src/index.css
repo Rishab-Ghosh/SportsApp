@@ -4,43 +4,56 @@
 
 :root {
   color-scheme: dark;
-}
-
-body {
-  background-color: #0a0a0f;
-  color: #e2e8f0;
-  font-family: 'Inter', system-ui, sans-serif;
-  margin: 0;
-  padding: 0;
-  overflow-x: hidden;
+  --bg-base: #080b12;
+  --bg-panel: #0d1117;
+  --bg-card: #0d1117;
+  --bg-card-hover: #131c28;
+  --border: #1e2d40;
+  --border-hover: #2d4a6b;
+  --text-primary: #e2e8f0;
+  --text-secondary: #94a3b8;
+  --text-muted: #64748b;
+  --accent: #38bdf8;
+  --green: #22c55e;
+  --red: #ef4444;
+  --orange: #f97316;
+  --yellow: #eab308;
+  --mono: 'JetBrains Mono', 'Fira Code', monospace;
 }
 
 * {
   box-sizing: border-box;
+  margin: 0;
+  padding: 0;
 }
 
-::-webkit-scrollbar {
-  width: 4px;
-  height: 4px;
+html, body, #root {
+  height: 100%;
+  overflow: hidden;
 }
-::-webkit-scrollbar-track {
-  background: #0a0a0f;
+
+body {
+  background-color: var(--bg-base);
+  color: var(--text-primary);
+  font-family: 'Inter', system-ui, sans-serif;
 }
-::-webkit-scrollbar-thumb {
-  background: #1e1e2e;
-  border-radius: 2px;
-}
-::-webkit-scrollbar-thumb:hover {
-  background: #3b82f6;
-}
+
+/* Thin scrollbar for inner scrollable areas */
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: var(--bg-base); }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+::-webkit-scrollbar-thumb:hover { background: var(--accent); }
+
+.scrollbar-hide::-webkit-scrollbar { display: none; }
+.scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
 
 .font-mono {
   font-family: 'JetBrains Mono', 'Fira Code', monospace;
 }
 
 @keyframes pulse-glow {
-  0%, 100% { box-shadow: 0 0 4px rgba(59, 130, 246, 0.3); }
-  50% { box-shadow: 0 0 12px rgba(59, 130, 246, 0.7); }
+  0%, 100% { box-shadow: 0 0 4px rgba(56, 189, 248, 0.3); }
+  50%       { box-shadow: 0 0 12px rgba(56, 189, 248, 0.7); }
 }
 
 .live-indicator {
@@ -48,12 +61,12 @@ body {
 }
 
 @keyframes skeleton-shimmer {
-  0% { background-position: -200% 0; }
+  0%   { background-position: -200% 0; }
   100% { background-position: 200% 0; }
 }
 
 .skeleton {
-  background: linear-gradient(90deg, #13131a 25%, #1e1e2e 50%, #13131a 75%);
+  background: linear-gradient(90deg, #0d1117 25%, #1e2d40 50%, #0d1117 75%);
   background-size: 200% 100%;
   animation: skeleton-shimmer 1.5s infinite;
 }
@@ -66,6 +79,3 @@ body {
 .animate-fade-in {
   animation: fade-in 0.2s ease-out;
 }
-
-.scrollbar-hide::-webkit-scrollbar { display: none; }
-.scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }

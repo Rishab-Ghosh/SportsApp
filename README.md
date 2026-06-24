@@ -1,6 +1,6 @@
 # SportsPulse
 
-A Bloomberg Terminal-style sports intelligence dashboard. Real-time Kalshi prediction markets, live ESPN scores, Guardian sports headlines, and a dynamic Heat Score engine — all in one dark, dense, data-first interface with WebSocket live updates.
+A Bloomberg Terminal-style sports intelligence dashboard. Real-time Kalshi prediction markets, live ESPN scores, multi-source scraped sports news, AI-powered story clustering, and a dynamic Heat Score engine — all in a dark, dense, three-panel terminal interface with WebSocket live updates.
 
 ![Dashboard](./screenshot.png)
 
@@ -12,7 +12,10 @@ A Bloomberg Terminal-style sports intelligence dashboard. Real-time Kalshi predi
 |-------|-------|
 | Frontend | React 18 · Vite · TailwindCSS · WebSocket |
 | Backend | Node.js · Express · `ws` · `node-cache` |
-| APIs | Kalshi · ESPN (unofficial) · Guardian · OpenF1 |
+| Scraping | `cheerio` · `xml2js` · Google News RSS · ESPN RSS · BBC Sport RSS · Reddit JSON |
+| AI | Anthropic claude-haiku-4-5 for story summaries |
+| Markets | Kalshi public + authenticated API (`node-forge` RSA-PSS) |
+| Scores | ESPN unofficial scoreboard · OpenF1 |
 | Deploy | Vercel (frontend) · Render (backend) |
 
 ---
@@ -65,13 +68,16 @@ cd client && npm run dev
 
 | Variable | Where to get it | Required? |
 |----------|----------------|-----------|
-| `GUARDIAN_API_KEY` | [open-platform.theguardian.com](https://open-platform.theguardian.com/access/) → Register (free) | Yes — fallback to mock data if missing |
-| `KALSHI_API_KEY_ID` | kalshi.com → Settings → API | Phase 3 only |
-| `KALSHI_PRIVATE_KEY` | Same as above — RSA PEM, store as single line with `\n` | Phase 3 only |
-| `PORT` | Set by Render automatically | No (defaults to 3001) |
+| `ANTHROPIC_API_KEY` | [console.anthropic.com](https://console.anthropic.com) → API Keys | No — falls back to article snippet |
+| `GUARDIAN_API_KEY` | [open-platform.theguardian.com](https://open-platform.theguardian.com/access/) | No — Guardian is supplemental |
+| `KALSHI_API_KEY_ID` | kalshi.com → Settings → API | Phase 4 only |
+| `KALSHI_PRIVATE_KEY` | Same as above — RSA PEM, one line with `\n` | Phase 4 only |
+| `PORT` | Set automatically by Render | No (defaults 3001) |
 | `FRONTEND_URL` | Your Vercel deploy URL | Yes in production |
 | `ALLOWED_ORIGIN` | Same as FRONTEND_URL | Yes in production |
 | `NODE_ENV` | `production` on Render | Recommended |
+
+> **AI summary cost**: `claude-haiku-4-5` generates 2-sentence summaries. Approximate cost: ~$0.001 per 100 stories — effectively free for personal use.
 
 ### Frontend (`client/.env.local`)
 
@@ -93,7 +99,7 @@ cd client && npm run dev
 5. Add environment variables in the Render dashboard (see table above)
 6. Note your service URL: `https://sportspulse-api.onrender.com`
 
-> Render free tier supports WebSocket — the WS server shares the HTTP port, no extra config.
+> Render free tier supports WebSocket. The keep-alive `/api/ping` (every 14 min) prevents sleep while the browser tab is open.
 
 ### Step 2 — Deploy frontend to Vercel
 
@@ -107,11 +113,11 @@ cd client && npm run dev
 
 ### Step 3 — Wire CORS back
 
-In the Render dashboard, set:
+In the Render dashboard:
 - `FRONTEND_URL` = your Vercel URL (e.g. `https://sportspulse.vercel.app`)
 - `ALLOWED_ORIGIN` = same value
 
-Redeploy the backend. Done.
+Redeploy the backend.
 
 ---
 
@@ -122,10 +128,12 @@ Redeploy the backend. Done.
 | `GET /api/kalshi/sports-markets` | Kalshi public API | 60s |
 | `GET /api/kalshi/portfolio` | Kalshi authenticated API | none |
 | `GET /api/scores/:sport` | ESPN / OpenF1 | 60s |
-| `GET /api/news` | Guardian API | 60s |
-| `GET /api/news/enriched` | Guardian + Kalshi cross-reference | 90s |
+| `GET /api/news` | Guardian API (legacy) | 60s |
+| `GET /api/news/enriched` | Guardian + Kalshi cross-ref | 90s |
+| `GET /api/news/feed?sport=&limit=` | Scraped + clustered StoryCards | 600s |
+| `GET /api/news/all?limit=` | All sports StoryCards by relevance | 600s |
 | `GET /api/heat-scores` | Seasonal baseline + Kalshi volume | 60s |
-| `GET /api/tracker/:sport` | Kalshi + Guardian filtered | 60s |
+| `GET /api/tracker/:sport` | Kalshi + news filtered | 60s |
 | `GET /health` | — | none |
 | `GET /api/ping` | — | none |
 | `WS /` | Push every 30s | — |
@@ -134,15 +142,40 @@ Redeploy the backend. Done.
 
 ---
 
-## Tabs
+## App Layout
 
-| Tab | What it shows |
-|-----|---------------|
-| **Home** | Top Kalshi markets by volume · live scores · breaking headlines |
-| **Odds** | Full Kalshi feed — filter by sport, sort by Volume / Movement / Closing Soon |
-| **Tracker** | SVG arc heat gauge per sport (gray→yellow→orange→red) + market cards with related news |
-| **News** | Enriched feed with green "📈 Live Market" badge when a matching Kalshi market exists |
-| **Scores** | Live / Upcoming / Final cards with "KALSHI MARKET ODDS" row when a match is found |
+```
+┌─────────────────────────────────────────────────────┐
+│  SPORTSPULSE  │  NEWS  ODDS  TRACKER  SCORES  │  WS │  ← 48px topbar
+├────────────┬────────────────────────┬────────────────┤
+│  Sports    │                        │  Kalshi        │
+│  sidebar   │    Center feed /       │  Markets       │
+│  220px     │    active tab          │                │
+│            │                        ├────────────────┤
+│  Heat dot  │    StoryCards (News)   │  Live Scores   │
+│  per sport │    OddsTab / Tracker   │  280px         │
+│            │    ScoresTab           │                │
+└────────────┴────────────────────────┴────────────────┘
+```
+
+**News center feed** shows AI-clustered StoryCards sorted by relevance score:
+- Recency (max 40pts) + Multi-source coverage (max 25pts) + Reddit upvotes (max 20pts) + Kalshi market match (+15pts)
+- Thin gradient relevance bar at card bottom
+- Green "📈 YES X¢" badge when a matching Kalshi market is found
+
+---
+
+## Scraping Sources
+
+| Source | Type | Update interval |
+|--------|------|----------------|
+| Google News RSS | RSS (6 sport queries) | 10 min |
+| Reddit r/nba, r/nfl, r/baseball, r/soccer, r/formula1, r/tennis | JSON API | 10 min |
+| ESPN RSS (5 feeds) | RSS | 10 min |
+| BBC Sport RSS (4 feeds) | RSS | 10 min |
+| Sky Sports RSS (soccer, F1) | RSS | 10 min |
+
+All scrapes run in parallel. Failed sources are skipped without crashing. Results cached for 10 minutes.
 
 ---
 
@@ -150,17 +183,18 @@ Redeploy the backend. Done.
 
 | Phase | Status | What shipped |
 |-------|--------|-------------|
-| **Phase 1** | ✅ | React + Vite + Tailwind frontend · Express backend · Kalshi, ESPN, Guardian, OpenF1 routes · 5-tab layout · 60s cache |
-| **Phase 2** | ✅ | Guardian API · News/Market cross-reference · Heat Score engine · Tracker cards · WebSocket live updates · Win probability on Scores · enriched News badges |
-| **Phase 3** | ✅ | Kalshi authenticated API layer (RSA-PSS signing) · `/api/kalshi/portfolio` · exponential-backoff WS reconnect · heartbeat pings · cold-start banner · keep-alive · mobile-responsive layout · share button |
+| **Phase 1** | ✅ | React + Vite + Tailwind · Express · Kalshi, ESPN, Guardian, OpenF1 · 5-tab layout · 60s cache |
+| **Phase 2** | ✅ | Guardian API · News/Market cross-ref · Heat Score engine · Tracker cards · WebSocket updates · Win probability |
+| **Phase 3** | ✅ | Kalshi RSA-PSS auth · `/portfolio` · WS heartbeat + exponential backoff · cold-start banner · keep-alive · mobile layout · share button |
+| **Phase 3.5** | ✅ | Multi-source web scraper (Google News/ESPN/BBC/Reddit/Sky) · AI story clustering (union-find) · Claude Haiku summaries · relevance scoring · 3-panel redesign (topbar + sport sidebar + center feed + right panel) · SVG sparklines · `/api/news/feed` + `/api/news/all` |
 | **Phase 4** | 🔜 | Live trading from the dashboard — Kalshi order placement, portfolio positions, P&L tracker |
 
 ---
 
 ## Notes
 
-- Kalshi public markets API requires no key — it's the open endpoint used in Phases 1–2
-- Guardian API is free for non-commercial developer use; rate limits are generous
+- Scraping respects each site's public RSS endpoint — no login or API key required
+- Reddit JSON API requires only a `User-Agent` header; no OAuth needed for public posts
 - ESPN scoreboard API is unofficial — for personal/demo projects only
-- All external calls have 8s timeouts with graceful mock fallbacks
-- Render free tier sleeps after 15 min inactivity; the keep-alive `/api/ping` (every 14 min) prevents this while the tab is open
+- AI summaries are cached permanently in-process and only generated for stories with 2+ sources or 100+ Reddit upvotes
+- The Kalshi public markets API has no key requirement; authenticated portfolio features require Phase 4 keys
