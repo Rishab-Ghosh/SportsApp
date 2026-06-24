@@ -1,17 +1,98 @@
-import React, { useEffect } from 'react';
-import { useApi } from '../hooks/useApi';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+
+const API_BASE = import.meta.env.VITE_API_BASE_URL || '';
+const RETRY_INTERVAL_MS = 5000;
+const MAX_RETRY_MS = 60000;
 
 export default function NewsFeed({ activeSport, onDataLoaded }) {
-  const sport = activeSport === 'All' ? '' : activeSport;
-  const url = sport ? `/api/news/feed?sport=${sport}&limit=25` : '/api/news/all?limit=30';
-  const { data, loading } = useApi(url, [url]);
+  const [cards, setCards] = useState([]);
+  const [total, setTotal] = useState(0);
+  const [loading, setLoading] = useState(true);
+
+  const abortRef = useRef(null);
+  const retryRef = useRef(null);
+  const retryStartRef = useRef(null);
+
+  const buildUrl = useCallback((sport) => {
+    if (!sport || sport === 'All') {
+      return `${API_BASE}/api/news/all?limit=30`;
+    }
+    return `${API_BASE}/api/news/feed?sport=${encodeURIComponent(sport)}&limit=25`;
+  }, []);
+
+  const doFetch = useCallback(async (signal, sport) => {
+    const url = buildUrl(sport);
+    console.log('[NEWS FETCH]', url);
+    try {
+      const r = await fetch(url, { signal });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      const data = await r.json();
+      console.log('[NEWS RESPONSE]', data);
+      // Normalize: backend returns { cards: [...], total: N } but guard against raw array
+      const fetched = Array.isArray(data) ? data : (data.cards || []);
+      const tot = Array.isArray(data) ? data.length : (data.total || fetched.length);
+      console.log('[NEWS CARDS COUNT]', fetched.length);
+      return { cards: fetched, total: tot };
+    } catch (err) {
+      if (err.name === 'AbortError') return null;
+      console.error('[NEWS FETCH ERROR]', err.message, 'url:', url);
+      return { cards: [], total: 0 };
+    }
+  }, [buildUrl]);
 
   useEffect(() => {
-    if (!loading && data) onDataLoaded?.();
-  }, [loading, data]); // eslint-disable-line
+    // Reset on every sport change
+    setCards([]);
+    setTotal(0);
+    setLoading(true);
+    retryStartRef.current = Date.now();
 
-  const cards = data?.cards || [];
-  const total = data?.total || 0;
+    if (abortRef.current) abortRef.current.abort();
+    if (retryRef.current) clearInterval(retryRef.current);
+
+    const controller = new AbortController();
+    abortRef.current = controller;
+
+    const run = async () => {
+      const result = await doFetch(controller.signal, activeSport);
+      if (result === null) return; // aborted — component unmounted or sport changed
+
+      setCards(result.cards);
+      setTotal(result.total);
+      setLoading(false);
+
+      if (result.cards.length > 0) {
+        onDataLoaded?.();
+        return;
+      }
+
+      // Got a valid response but 0 cards — scraper may not have run yet on cold start.
+      // Retry every 5s for up to 60s.
+      retryRef.current = setInterval(async () => {
+        if (Date.now() - retryStartRef.current > MAX_RETRY_MS) {
+          console.log('[NEWS RETRY] timeout — giving up');
+          clearInterval(retryRef.current);
+          return;
+        }
+        const retry = await doFetch(controller.signal, activeSport);
+        if (retry === null) { clearInterval(retryRef.current); return; }
+        console.log('[NEWS RETRY]', retry.cards.length, 'cards');
+        if (retry.cards.length > 0) {
+          setCards(retry.cards);
+          setTotal(retry.total);
+          onDataLoaded?.();
+          clearInterval(retryRef.current);
+        }
+      }, RETRY_INTERVAL_MS);
+    };
+
+    run();
+
+    return () => {
+      controller.abort();
+      if (retryRef.current) clearInterval(retryRef.current);
+    };
+  }, [activeSport]); // eslint-disable-line
 
   return (
     <div style={{ padding: 16 }}>
@@ -30,6 +111,8 @@ export default function NewsFeed({ activeSport, onDataLoaded }) {
     </div>
   );
 }
+
+// ── Sub-components ────────────────────────────────────────────────────────────
 
 function SectionHeader({ sport, total }) {
   return (
@@ -65,7 +148,6 @@ function StoryCard({ card }) {
       onMouseLeave={e => e.currentTarget.style.borderColor = 'var(--border)'}
       onClick={() => card.sources?.[0]?.url && window.open(card.sources[0].url, '_blank')}
     >
-      {/* Headline */}
       <p style={{
         fontSize: 13, fontWeight: 500, color: 'var(--text-primary)',
         lineHeight: '1.45', marginBottom: 5,
@@ -73,7 +155,6 @@ function StoryCard({ card }) {
         {card.headline}
       </p>
 
-      {/* Summary */}
       {card.summary && card.summary !== card.headline && (
         <p style={{
           fontSize: 11, color: 'var(--text-muted)', lineHeight: '1.5',
@@ -85,12 +166,9 @@ function StoryCard({ card }) {
         </p>
       )}
 
-      {/* Bottom row */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, paddingBottom: 10, flexWrap: 'wrap' }}>
-        {/* Sport badge */}
         <SportChip sport={card.sport_tag} />
 
-        {/* Kalshi badge */}
         {hasMarket && (
           <span
             onClick={e => { e.stopPropagation(); window.open(card.market_match.url, '_blank'); }}
@@ -105,14 +183,12 @@ function StoryCard({ card }) {
           </span>
         )}
 
-        {/* Reddit upvotes */}
         {card.reddit_upvotes > 0 && (
           <span style={{ fontSize: 10, fontFamily: 'var(--mono)', color: 'var(--orange)' }}>
             ▲ {fmtNum(card.reddit_upvotes)}
           </span>
         )}
 
-        {/* Source pills */}
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 4, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
           {displaySources.map((s, i) => (
             <a
@@ -142,7 +218,6 @@ function StoryCard({ card }) {
         </div>
       </div>
 
-      {/* Relevance bar */}
       <div style={{ height: 2, background: 'var(--border)', marginLeft: -14, marginRight: -14 }}>
         <div style={{
           height: '100%',
