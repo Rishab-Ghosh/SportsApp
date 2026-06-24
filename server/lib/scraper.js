@@ -1,9 +1,9 @@
 const axios = require('axios');
 const { parseStringPromise } = require('xml2js');
 const crypto = require('crypto');
-const NodeCache = require('node-cache');
 
-const scraperCache = new NodeCache({ stdTTL: 600 }); // 10 min
+// Module-level cache — survives between requests, cleared only on server restart
+let _cache = { clusters: [], articles: [], lastRun: null };
 
 function hash(str) {
   return crypto.createHash('md5').update(str || '').digest('hex').slice(0, 12);
@@ -34,7 +34,7 @@ function toArticle(fields) {
   };
 }
 
-// ── Google News RSS ───────────────────────────────────────────────────────────
+// ── Sources ───────────────────────────────────────────────────────────────────
 
 const GOOGLE_QUERIES = [
   { q: 'NBA trade', sport: 'NBA' },
@@ -45,30 +45,6 @@ const GOOGLE_QUERIES = [
   { q: 'tennis', sport: 'Tennis' },
 ];
 
-async function scrapeGoogleNews() {
-  const results = await Promise.allSettled(
-    GOOGLE_QUERIES.map(async ({ q, sport }) => {
-      const url = `https://news.google.com/rss/search?q=${encodeURIComponent(q)}&hl=en-US&gl=US&ceid=US:en`;
-      const res = await axios.get(url, { timeout: 8000, headers: { 'User-Agent': 'SportsPulse/1.0' } });
-      const parsed = await parseStringPromise(res.data, { explicitArray: false });
-      const items = parsed?.rss?.channel?.item || [];
-      const arr = Array.isArray(items) ? items : [items];
-      return arr.slice(0, 8).map(item => toArticle({
-        title: item.title,
-        url: item.link,
-        source: item.source?._ || item.source || 'Google News',
-        publishedAt: item.pubDate ? new Date(item.pubDate).toISOString() : new Date().toISOString(),
-        sport_tag: sport,
-        type: 'rss',
-        description: item.description || '',
-      }));
-    })
-  );
-  return results.flatMap(r => r.status === 'fulfilled' ? r.value : []);
-}
-
-// ── Reddit JSON API ───────────────────────────────────────────────────────────
-
 const SUBREDDITS = [
   { sub: 'nba', sport: 'NBA' },
   { sub: 'soccer', sport: 'Soccer' },
@@ -78,35 +54,6 @@ const SUBREDDITS = [
   { sub: 'tennis', sport: 'Tennis' },
 ];
 
-async function scrapeReddit() {
-  const results = await Promise.allSettled(
-    SUBREDDITS.map(async ({ sub, sport }) => {
-      const url = `https://www.reddit.com/r/${sub}/hot.json?limit=10&t=day`;
-      const res = await axios.get(url, {
-        timeout: 8000,
-        headers: { 'User-Agent': 'SportsPulse/1.0' },
-      });
-      const posts = res.data?.data?.children || [];
-      return posts
-        .filter(p => !p.data?.stickied)
-        .slice(0, 8)
-        .map(p => toArticle({
-          title: p.data.title,
-          url: `https://www.reddit.com${p.data.permalink}`,
-          source: `Reddit r/${sub}`,
-          publishedAt: new Date(p.data.created_utc * 1000).toISOString(),
-          sport_tag: sport,
-          upvotes: p.data.score || 0,
-          type: 'reddit',
-          description: p.data.selftext?.slice(0, 200) || '',
-        }));
-    })
-  );
-  return results.flatMap(r => r.status === 'fulfilled' ? r.value : []);
-}
-
-// ── ESPN RSS ──────────────────────────────────────────────────────────────────
-
 const ESPN_FEEDS = [
   { url: 'https://www.espn.com/espn/rss/news', sport: 'General' },
   { url: 'https://www.espn.com/espn/rss/nba/news', sport: 'NBA' },
@@ -115,32 +62,6 @@ const ESPN_FEEDS = [
   { url: 'https://www.espn.com/espn/rss/soccer/news', sport: 'Soccer' },
 ];
 
-async function scrapeESPN() {
-  const results = await Promise.allSettled(
-    ESPN_FEEDS.map(async ({ url, sport }) => {
-      const res = await axios.get(url, {
-        timeout: 8000,
-        headers: { 'User-Agent': 'SportsPulse/1.0' },
-      });
-      const parsed = await parseStringPromise(res.data, { explicitArray: false });
-      const items = parsed?.rss?.channel?.item || [];
-      const arr = Array.isArray(items) ? items : [items];
-      return arr.slice(0, 6).map(item => toArticle({
-        title: item.title,
-        url: item.link,
-        source: 'ESPN',
-        publishedAt: item.pubDate ? new Date(item.pubDate).toISOString() : new Date().toISOString(),
-        sport_tag: sport === 'General' ? detectSportTag(item.title) : sport,
-        type: 'rss',
-        description: item.description || '',
-      }));
-    })
-  );
-  return results.flatMap(r => r.status === 'fulfilled' ? r.value : []);
-}
-
-// ── BBC Sport RSS ─────────────────────────────────────────────────────────────
-
 const BBC_FEEDS = [
   { url: 'https://feeds.bbci.co.uk/sport/rss.xml', sport: 'General' },
   { url: 'https://feeds.bbci.co.uk/sport/football/rss.xml', sport: 'Soccer' },
@@ -148,73 +69,177 @@ const BBC_FEEDS = [
   { url: 'https://feeds.bbci.co.uk/sport/tennis/rss.xml', sport: 'Tennis' },
 ];
 
-async function scrapeBBC() {
-  const results = await Promise.allSettled(
-    BBC_FEEDS.map(async ({ url, sport }) => {
-      const res = await axios.get(url, {
-        timeout: 8000,
-        headers: { 'User-Agent': 'SportsPulse/1.0' },
-      });
-      const parsed = await parseStringPromise(res.data, { explicitArray: false });
-      const items = parsed?.rss?.channel?.item || [];
-      const arr = Array.isArray(items) ? items : [items];
-      return arr.slice(0, 6).map(item => toArticle({
-        title: item.title,
-        url: item.link,
-        source: 'BBC Sport',
-        publishedAt: item.pubDate ? new Date(item.pubDate).toISOString() : new Date().toISOString(),
-        sport_tag: sport === 'General' ? detectSportTag(item.title) : sport,
-        type: 'rss',
-        description: item.description || '',
-      }));
-    })
-  );
-  return results.flatMap(r => r.status === 'fulfilled' ? r.value : []);
-}
-
-// ── Sky Sports RSS ────────────────────────────────────────────────────────────
-
 const SKY_FEEDS = [
   { url: 'https://www.skysports.com/rss/12040', sport: 'Soccer' },
   { url: 'https://www.skysports.com/rss/12202', sport: 'F1' },
 ];
 
-async function skySports() {
+// ── Scrapers ──────────────────────────────────────────────────────────────────
+
+async function scrapeRSS(url, sport) {
+  const res = await axios.get(url, { timeout: 8000, headers: { 'User-Agent': 'SportsPulse/1.0' } });
+  const parsed = await parseStringPromise(res.data, { explicitArray: false });
+  const items = parsed?.rss?.channel?.item || [];
+  const arr = Array.isArray(items) ? items : [items];
+  return arr.slice(0, 8).map(item => toArticle({
+    title: item.title,
+    url: item.link,
+    source: item.source?._ || item.source || new URL(url).hostname.replace('www.', '').replace('feeds.', ''),
+    publishedAt: item.pubDate ? new Date(item.pubDate).toISOString() : new Date().toISOString(),
+    sport_tag: sport === 'General' ? detectSportTag(item.title) : sport,
+    type: 'rss',
+    description: item.description || '',
+  })).filter(a => a.title);
+}
+
+async function scrapeGoogleNews() {
   const results = await Promise.allSettled(
-    SKY_FEEDS.map(async ({ url, sport }) => {
-      const res = await axios.get(url, {
-        timeout: 8000,
-        headers: { 'User-Agent': 'SportsPulse/1.0' },
-      });
-      const parsed = await parseStringPromise(res.data, { explicitArray: false });
-      const items = parsed?.rss?.channel?.item || [];
-      const arr = Array.isArray(items) ? items : [items];
-      return arr.slice(0, 6).map(item => toArticle({
-        title: item.title,
-        url: item.link,
-        source: 'Sky Sports',
-        publishedAt: item.pubDate ? new Date(item.pubDate).toISOString() : new Date().toISOString(),
-        sport_tag: sport,
-        type: 'rss',
-        description: item.description || '',
-      }));
-    })
+    GOOGLE_QUERIES.map(({ q, sport }) =>
+      axios.get(`https://news.google.com/rss/search?q=${encodeURIComponent(q)}&hl=en-US&gl=US&ceid=US:en`, {
+        timeout: 8000, headers: { 'User-Agent': 'SportsPulse/1.0' },
+      }).then(async res => {
+        const parsed = await parseStringPromise(res.data, { explicitArray: false });
+        const items = parsed?.rss?.channel?.item || [];
+        const arr = Array.isArray(items) ? items : [items];
+        return arr.slice(0, 8).map(item => toArticle({
+          title: item.title,
+          url: item.link,
+          source: item.source?._ || 'Google News',
+          publishedAt: item.pubDate ? new Date(item.pubDate).toISOString() : new Date().toISOString(),
+          sport_tag: sport,
+          type: 'rss',
+          description: item.description || '',
+        })).filter(a => a.title);
+      })
+    )
   );
   return results.flatMap(r => r.status === 'fulfilled' ? r.value : []);
 }
 
-// ── Main Scrape ───────────────────────────────────────────────────────────────
+async function scrapeReddit() {
+  const results = await Promise.allSettled(
+    SUBREDDITS.map(({ sub, sport }) =>
+      axios.get(`https://www.reddit.com/r/${sub}/hot.json?limit=10&t=day`, {
+        timeout: 8000,
+        headers: { 'User-Agent': 'SportsPulse/1.0' },
+      }).then(res => {
+        const posts = res.data?.data?.children || [];
+        return posts
+          .filter(p => !p.data?.stickied)
+          .slice(0, 8)
+          .map(p => toArticle({
+            title: p.data.title,
+            url: `https://www.reddit.com${p.data.permalink}`,
+            source: `Reddit r/${sub}`,
+            publishedAt: new Date(p.data.created_utc * 1000).toISOString(),
+            sport_tag: sport,
+            upvotes: p.data.score || 0,
+            type: 'reddit',
+            description: p.data.selftext?.slice(0, 200) || '',
+          }));
+      })
+    )
+  );
+  return results.flatMap(r => r.status === 'fulfilled' ? r.value : []);
+}
 
-async function scrapeAll() {
-  const cached = scraperCache.get('scraped_articles');
-  if (cached) return cached;
+async function scrapeESPN() {
+  const results = await Promise.allSettled(ESPN_FEEDS.map(f => scrapeRSS(f.url, f.sport)));
+  return results.flatMap(r => r.status === 'fulfilled' ? r.value : []);
+}
+
+async function scrapeBBC() {
+  const results = await Promise.allSettled(BBC_FEEDS.map(f => scrapeRSS(f.url, f.sport)));
+  return results.flatMap(r => r.status === 'fulfilled' ? r.value : []);
+}
+
+async function scrapeSky() {
+  const results = await Promise.allSettled(SKY_FEEDS.map(f => scrapeRSS(f.url, f.sport)));
+  return results.flatMap(r => r.status === 'fulfilled' ? r.value : []);
+}
+
+// ── Clustering (inline, no dependency on cluster.js) ─────────────────────────
+
+const STOPWORDS = new Set([
+  'the','a','an','in','on','at','to','for','of','and','or','is','was','are',
+  'were','has','have','been','with','from','by','that','this','its','his','her',
+  'their','our','they','them','he','she','it','be','do','did','not','but','as',
+  'after','before','about','into','over','than','more','what','when','who','says',
+]);
+
+function tokens(str) {
+  return [...new Set(
+    (str || '').toLowerCase().replace(/['']/g, '').split(/\W+/)
+      .filter(w => w.length > 4 && !STOPWORDS.has(w))
+  )];
+}
+
+function clusterAndScore(articles) {
+  const used = new Array(articles.length).fill(false);
+  const clusters = [];
+
+  for (let i = 0; i < articles.length; i++) {
+    if (used[i]) continue;
+    const group = [articles[i]];
+    used[i] = true;
+    const ti = new Set(tokens(articles[i].title));
+
+    for (let j = i + 1; j < articles.length; j++) {
+      if (used[j]) continue;
+      // Same sport required to avoid cross-sport false clusters
+      if (articles[i].sport_tag !== articles[j].sport_tag) continue;
+      const tj = tokens(articles[j].title);
+      let overlap = 0;
+      for (const t of tj) { if (ti.has(t)) { overlap++; if (overlap >= 2) break; } }
+      if (overlap >= 2) { group.push(articles[j]); used[j] = true; }
+    }
+    clusters.push(group);
+  }
+
+  return clusters.map(group => {
+    const sorted = [...group].sort((a, b) => (b.upvotes || 0) - (a.upvotes || 0));
+    const lead = sorted[0];
+    const sourceSet = new Set(group.map(a => a.source));
+    const redditUp = group.filter(a => a.type === 'reddit').reduce((s, a) => s + (a.upvotes || 0), 0);
+    const newest = group.reduce((m, a) => {
+      const t = new Date(a.publishedAt).getTime();
+      return t > m ? t : m;
+    }, 0);
+    const ageHr = (Date.now() - newest) / 3.6e6;
+
+    let rel = 0;
+    rel += ageHr < 1 ? 40 : ageHr < 6 ? 30 : ageHr < 24 ? 20 : 5;
+    const sc = sourceSet.size;
+    rel += sc >= 4 ? 25 : sc === 3 ? 18 : sc === 2 ? 10 : 5;
+    rel += redditUp > 1000 ? 20 : redditUp > 500 ? 15 : redditUp > 100 ? 10 : redditUp > 0 ? 5 : 0;
+
+    return {
+      id: hash(lead.title),
+      headline: lead.title,
+      summary: lead.description || group.slice(0, 2).map(a => a.title).join(' · '),
+      sport_tag: lead.sport_tag,
+      sources: [...new Map(group.map(a => [a.source, { name: a.source, url: a.url }])).values()],
+      source_count: sc,
+      reddit_upvotes: redditUp,
+      relevance_score: Math.min(100, Math.round(rel)),
+      publishedAt: newest ? new Date(newest).toISOString() : lead.publishedAt,
+      market_match: null, // enriched later by news.js if Kalshi markets are available
+    };
+  }).sort((a, b) => b.relevance_score - a.relevance_score);
+}
+
+// ── Public API ────────────────────────────────────────────────────────────────
+
+async function runScraper() {
+  console.log('[scraper] Starting scrape...');
+  const t0 = Date.now();
 
   const [google, reddit, espn, bbc, sky] = await Promise.allSettled([
     scrapeGoogleNews(),
     scrapeReddit(),
     scrapeESPN(),
     scrapeBBC(),
-    skySports(),
+    scrapeSky(),
   ]);
 
   const log = (name, r) => {
@@ -235,16 +260,30 @@ async function scrapeAll() {
     ...(sky.status === 'fulfilled' ? sky.value : []),
   ];
 
-  // Deduplicate by id
+  // Deduplicate
   const seen = new Set();
-  const unique = all.filter(a => {
-    if (seen.has(a.id)) return false;
-    seen.add(a.id);
-    return true;
-  });
+  const unique = all.filter(a => { if (seen.has(a.id)) return false; seen.add(a.id); return true; });
 
-  scraperCache.set('scraped_articles', unique);
-  return unique;
+  const clusters = clusterAndScore(unique);
+  console.log(`[scraper] Done — ${unique.length} articles → ${clusters.length} clusters (${Date.now() - t0}ms)`);
+
+  _cache = { clusters, articles: unique, lastRun: Date.now() };
+  return _cache;
 }
 
-module.exports = { scrapeAll };
+function getNews(sport) {
+  const { clusters } = _cache;
+  if (!sport || sport === 'All') return clusters.slice(0, 40);
+  return clusters.filter(c => c.sport_tag === sport).slice(0, 30);
+}
+
+// Legacy export — kept so existing code that calls scrapeAll() still works
+async function scrapeAll() {
+  if (_cache.articles.length > 0 && _cache.lastRun && (Date.now() - _cache.lastRun) < 600000) {
+    return _cache.articles;
+  }
+  await runScraper();
+  return _cache.articles;
+}
+
+module.exports = { runScraper, getNews, scrapeAll };

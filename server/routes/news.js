@@ -1,7 +1,7 @@
 const express = require('express');
 const axios = require('axios');
 const { withCache } = require('../middleware/cache');
-const { scrapeAll } = require('../lib/scraper');
+const { scrapeAll, getNews } = require('../lib/scraper');
 const { buildStoryCards } = require('../lib/cluster');
 
 const router = express.Router();
@@ -138,27 +138,53 @@ function getMockNews() {
 
 // ── Scraped feed routes ───────────────────────────────────────────────────────
 
-async function getScrapedStoryCards() {
-  return withCache('story_cards', async () => {
-    const [articles, markets] = await Promise.all([
-      scrapeAll(),
-      getKalshiMarketsForEnrichment(),
-    ]);
-    return buildStoryCards(articles, markets);
-  }, 600); // 10 min — matches scraper cache
+// Enrich clusters from scraper with Kalshi market matches
+async function enrichClusters(clusters) {
+  let markets = [];
+  try {
+    const port = process.env.PORT || 3001;
+    const res = await axios.get(`http://localhost:${port}/api/kalshi/sports-markets`, { timeout: 4000 });
+    markets = res.data?.markets || [];
+  } catch { /* no markets — that's fine */ }
+
+  if (!markets.length) return clusters;
+
+  function significantTokens(str) {
+    return (str || '').toLowerCase().split(/\W+/).filter(w => w.length > 5);
+  }
+
+  return clusters.map(c => {
+    if (c.market_match) return c; // already enriched
+    const tokens = new Set(significantTokens(c.headline));
+    let match = null;
+    for (const m of markets) {
+      if (significantTokens(m.title || '').some(t => tokens.has(t))) { match = m; break; }
+    }
+    return match ? {
+      ...c,
+      market_match: { id: match.id, title: match.title, yes_price: match.yes_price, url: `https://kalshi.com/markets/${match.id}` },
+      relevance_score: Math.min(100, c.relevance_score + 15),
+    } : c;
+  });
 }
 
 // GET /api/news/feed?sport=NBA&limit=20
 router.get('/feed', async (req, res) => {
   try {
-    const sport = req.query.sport || null;
+    const sport = req.query.sport && req.query.sport !== 'All' ? req.query.sport : null;
     const limit = Math.min(parseInt(req.query.limit) || 20, 50);
-    let cards = await getScrapedStoryCards();
-    if (sport && sport !== 'All') cards = cards.filter(c => c.sport_tag === sport);
-    res.json({ cards: cards.slice(0, limit), total: cards.length });
+    let clusters = getNews(sport);
+    // Fall back to full scrape if scraper hasn't run yet
+    if (clusters.length === 0) {
+      const articles = await scrapeAll();
+      clusters = await buildStoryCards(articles, []);
+      if (sport) clusters = clusters.filter(c => c.sport_tag === sport);
+    }
+    const enriched = await enrichClusters(clusters);
+    res.json({ cards: enriched.slice(0, limit), total: enriched.length });
   } catch (err) {
     console.error('News feed error:', err.message);
-    res.status(502).json({ error: 'Failed to fetch news feed', cards: [] });
+    res.json({ cards: [], total: 0, error: err.message });
   }
 });
 
@@ -166,11 +192,16 @@ router.get('/feed', async (req, res) => {
 router.get('/all', async (req, res) => {
   try {
     const limit = Math.min(parseInt(req.query.limit) || 30, 100);
-    const cards = await getScrapedStoryCards();
-    res.json({ cards: cards.slice(0, limit), total: cards.length });
+    let clusters = getNews(null);
+    if (clusters.length === 0) {
+      const articles = await scrapeAll();
+      clusters = await buildStoryCards(articles, []);
+    }
+    const enriched = await enrichClusters(clusters);
+    res.json({ cards: enriched.slice(0, limit), total: enriched.length });
   } catch (err) {
     console.error('News all error:', err.message);
-    res.status(502).json({ error: 'Failed to fetch all news', cards: [] });
+    res.json({ cards: [], total: 0, error: err.message });
   }
 });
 
