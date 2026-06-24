@@ -2,13 +2,20 @@ services:
   - type: web
     name: sportspulse-api
     runtime: node
+    rootDir: server
     buildCommand: npm install
-    startCommand: npm start
+    startCommand: node server.js
+    healthCheckPath: /health
     envVars:
       - key: NODE_ENV
         value: production
-      - key: NEWS_API_KEY
+      - key: GUARDIAN_API_KEY
+        sync: false
+      - key: KALSHI_API_KEY_ID
+        sync: false
+      - key: KALSHI_PRIVATE_KEY
         sync: false
       - key: FRONTEND_URL
         sync: false
-    healthCheckPath: /api/health
+      - key: ALLOWED_ORIGIN
+        sync: false

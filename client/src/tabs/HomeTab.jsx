@@ -5,7 +5,7 @@ import OddsBar from '../components/OddsBar';
 import TimeAgo from '../components/TimeAgo';
 import { SkeletonCard } from '../components/Skeleton';
 
-export default function HomeTab() {
+export default function HomeTab({ onDataLoaded }) {
   const { data: marketsData, loading: ml } = useApi('/api/kalshi/sports-markets');
   const { data: scoresData, loading: sl } = useApi('/api/scores/nba');
   const { data: newsData, loading: nl } = useApi('/api/news');
@@ -16,8 +16,13 @@ export default function HomeTab() {
   // Combine NBA + other scores for live games widget
   const games = (scoresData?.games || []).slice(0, 4);
 
+  // Dismiss cold-start banner once any data resolves
+  React.useEffect(() => {
+    if (!ml || !sl || !nl) onDataLoaded?.();
+  }, [ml, sl, nl]); // eslint-disable-line
+
   return (
-    <div className="grid grid-cols-3 gap-4 h-full">
+    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 h-full">
       {/* Left: Top Kalshi Markets */}
       <section>
         <SectionHeader label="TOP MARKETS" sub="by volume · Kalshi" />

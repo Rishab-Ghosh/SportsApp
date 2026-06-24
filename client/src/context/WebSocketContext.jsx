@@ -1,6 +1,11 @@
 import React, { createContext, useReducer, useEffect, useRef } from 'react';
 
-const WS_URL = import.meta.env.VITE_WS_URL || 'ws://localhost:3001';
+function resolveWsUrl() {
+  if (import.meta.env.VITE_WS_URL) return import.meta.env.VITE_WS_URL;
+  const proto = window.location.protocol === 'https:' ? 'wss://' : 'ws://';
+  const host = window.location.host.replace(':5173', ':3001');
+  return `${proto}${host}`;
+}
 
 export const WebSocketContext = createContext(null);
 
@@ -35,6 +40,7 @@ export function WebSocketProvider({ children }) {
   const [state, dispatch] = useReducer(reducer, initialState);
   const wsRef = useRef(null);
   const reconnectTimerRef = useRef(null);
+  const attemptRef = useRef(0);
   const mountedRef = useRef(true);
 
   useEffect(() => {
@@ -45,20 +51,20 @@ export function WebSocketProvider({ children }) {
       if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) return;
 
       try {
-        const ws = new WebSocket(WS_URL);
+        const ws = new WebSocket(resolveWsUrl());
         wsRef.current = ws;
 
         ws.onopen = () => {
-          if (mountedRef.current) dispatch({ type: 'connected' });
+          if (!mountedRef.current) return;
+          attemptRef.current = 0;
+          dispatch({ type: 'connected' });
         };
 
         ws.onmessage = (e) => {
           if (!mountedRef.current) return;
           try {
             const payload = JSON.parse(e.data);
-            if (payload.type === 'update') {
-              dispatch({ type: 'update', payload });
-            }
+            if (payload.type === 'update') dispatch({ type: 'update', payload });
           } catch {
             // ignore malformed messages
           }
@@ -67,16 +73,19 @@ export function WebSocketProvider({ children }) {
         ws.onclose = () => {
           if (!mountedRef.current) return;
           dispatch({ type: 'disconnected' });
-          reconnectTimerRef.current = setTimeout(connect, 3000);
+          // exponential backoff: 1s, 2s, 4s, 8s … cap at 30s
+          const delay = Math.min(1000 * 2 ** attemptRef.current, 30000);
+          attemptRef.current += 1;
+          reconnectTimerRef.current = setTimeout(connect, delay);
         };
 
         ws.onerror = () => {
-          // onclose will fire after onerror, triggering reconnect
           ws.close();
         };
       } catch {
-        // WebSocket constructor can throw if URL is invalid
-        reconnectTimerRef.current = setTimeout(connect, 3000);
+        const delay = Math.min(1000 * 2 ** attemptRef.current, 30000);
+        attemptRef.current += 1;
+        reconnectTimerRef.current = setTimeout(connect, delay);
       }
     }
 
@@ -86,7 +95,7 @@ export function WebSocketProvider({ children }) {
       mountedRef.current = false;
       clearTimeout(reconnectTimerRef.current);
       if (wsRef.current) {
-        wsRef.current.onclose = null; // prevent reconnect on unmount
+        wsRef.current.onclose = null;
         wsRef.current.close();
       }
     };

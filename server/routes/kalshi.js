@@ -1,6 +1,7 @@
 const express = require('express');
 const axios = require('axios');
 const { withCache } = require('../middleware/cache');
+const { kalshiGet } = require('../lib/kalshi');
 
 const router = express.Router();
 
@@ -68,6 +69,20 @@ router.get('/sports-markets', async (req, res) => {
   } catch (err) {
     console.error('Kalshi error:', err.message);
     res.status(502).json({ error: 'Failed to fetch Kalshi markets', markets: [] });
+  }
+});
+
+router.get('/portfolio', async (req, res) => {
+  const keyId = process.env.KALSHI_API_KEY_ID;
+  if (!keyId) {
+    return res.json({ error: 'No Kalshi credentials configured', balance: null });
+  }
+  try {
+    const data = await kalshiGet('/portfolio/balance');
+    res.json({ balance: data });
+  } catch (err) {
+    console.error('Kalshi portfolio error:', err.message);
+    res.status(502).json({ error: 'Failed to fetch portfolio', balance: null });
   }
 });
 

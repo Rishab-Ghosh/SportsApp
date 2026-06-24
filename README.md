@@ -1,155 +1,117 @@
-# SportsPulse — Sports Intelligence Terminal
+# SportsPulse
 
-A Bloomberg Terminal-style sports dashboard. Dark, dense, data-first. Live Kalshi prediction markets, ESPN scores, Guardian sports news, and a dynamic heat score engine — all in one view with real-time WebSocket updates.
+A Bloomberg Terminal-style sports intelligence dashboard. Real-time Kalshi prediction markets, live ESPN scores, Guardian sports headlines, and a dynamic Heat Score engine — all in one dark, dense, data-first interface with WebSocket live updates.
 
-## Stack
+![Dashboard](./screenshot.png)
 
-- **Frontend**: React 18 + Vite + TailwindCSS — deploys to Vercel
-- **Backend**: Node.js + Express + WebSocket (`ws`) — deploys to Render
-- **APIs**: Kalshi (prediction markets), ESPN public API (scores), Guardian API (headlines), OpenF1 (F1 sessions)
+---
+
+## Tech Stack
+
+| Layer | Tools |
+|-------|-------|
+| Frontend | React 18 · Vite · TailwindCSS · WebSocket |
+| Backend | Node.js · Express · `ws` · `node-cache` |
+| APIs | Kalshi · ESPN (unofficial) · Guardian · OpenF1 |
+| Deploy | Vercel (frontend) · Render (backend) |
 
 ---
 
 ## Local Setup
 
 ### Prerequisites
-
 - Node.js ≥ 18
 - npm ≥ 9
 
 ### 1. Clone and install
 
 ```bash
-# Backend
-cd server
-npm install
+git clone https://github.com/Rishab-Ghosh/SportsApp.git
+cd SportsApp
 
-# Frontend
-cd ../client
-npm install
+cd server && npm install
+cd ../client && npm install
 ```
 
-### 2. Get a free Guardian API key
+### 2. Configure environment variables
 
-1. Go to [open-platform.theguardian.com](https://open-platform.theguardian.com/access/) and click **Register**
-2. Sign up — the developer tier is free and gives generous rate limits
-3. Copy your API key from the confirmation email
-
-> The Guardian's news API returns structured sports content directly from their editorial feed. No CORS issues, no request-from-browser restrictions.
-
-### 3. Configure environment variables
-
-**Backend** — create `server/.env`:
+**Backend** — `server/.env`
 ```bash
 cp server/.env.example server/.env
-# Edit server/.env:
-GUARDIAN_API_KEY=your_guardian_key_here
-PORT=3001
-FRONTEND_URL=http://localhost:5173   # change to Vercel URL in production
+# Fill in your keys (see table below)
 ```
 
-**Frontend** — create `client/.env.local`:
+**Frontend** — `client/.env.local`
 ```bash
 cp client/.env.example client/.env.local
-# Defaults work for local dev:
-VITE_API_BASE_URL=http://localhost:3001
-VITE_WS_URL=ws://localhost:3001
+# Defaults work for local dev — no changes needed
 ```
 
-### 4. Run locally
+### 3. Run locally
 
 ```bash
 # Terminal 1 — backend (HTTP + WebSocket on :3001)
-cd server
-npm run dev
+cd server && npm run dev
 
-# Terminal 2 — frontend
-cd client
-npm run dev      # → http://localhost:5173
+# Terminal 2 — frontend (http://localhost:5173)
+cd client && npm run dev
 ```
 
 ---
 
-## Phase 2 — What's New
+## Environment Variable Reference
 
-### Features added over Phase 1
+### Backend (`server/.env`)
 
-| Feature | Details |
-|---------|---------|
-| **Guardian API** | Replaces NewsAPI — structured sports editorial, no browser restrictions |
-| **News/Market Cross-Reference** | `/api/news/enriched` matches article titles against Kalshi market titles using token overlap. Articles with a match get a `market_match` field; the News tab shows a green "📈 Live Market — YES X%" badge |
-| **Dynamic Heat Score Engine** | `/api/heat-scores` computes a 0–100 activity score per sport using a seasonal calendar baseline (Free Agency, Transfer Window, Trade Deadline, etc.) multiplied by a Kalshi volume signal |
-| **Tracker Cards** | `/api/tracker/:sport` returns Kalshi market cards with related news articles attached via token matching. Sports with no markets show "Rumor" cards with the latest news |
-| **WebSocket Live Updates** | Server pushes `{ type: "update", kalshi, heat, scores }` to all connected clients every 30 seconds. Frontend `WebSocketProvider` reconnects automatically after 3 seconds if the connection drops |
-| **Win Probability on Scores** | Scores tab matches each game to a Kalshi market by team name tokens. When a match is found, a "KALSHI MARKET ODDS" row shows YES/NO bars clearly labeled as market-derived (not statistical) |
+| Variable | Where to get it | Required? |
+|----------|----------------|-----------|
+| `GUARDIAN_API_KEY` | [open-platform.theguardian.com](https://open-platform.theguardian.com/access/) → Register (free) | Yes — fallback to mock data if missing |
+| `KALSHI_API_KEY_ID` | kalshi.com → Settings → API | Phase 3 only |
+| `KALSHI_PRIVATE_KEY` | Same as above — RSA PEM, store as single line with `\n` | Phase 3 only |
+| `PORT` | Set by Render automatically | No (defaults to 3001) |
+| `FRONTEND_URL` | Your Vercel deploy URL | Yes in production |
+| `ALLOWED_ORIGIN` | Same as FRONTEND_URL | Yes in production |
+| `NODE_ENV` | `production` on Render | Recommended |
 
-### Heat Score Algorithm
+### Frontend (`client/.env.local`)
 
-Each sport has a **seasonal baseline** (0–100) derived from the current calendar date:
-
-| Sport | Peak Event | Peak Score |
-|-------|-----------|-----------|
-| NBA | Free Agency (Jun 25 – Jul 20) | 96 |
-| NBA | Trade Deadline (Feb 1–6) | 98 |
-| NFL | Free Agency (Mar 10–20) | 88 |
-| NFL | Draft (Apr 24–26) | 85 |
-| MLB | Trade Deadline (Jul 25 – Aug 1) | 88 |
-| Soccer | Summer Transfer Window (Jun 10 – Aug 31) | 90 |
-| F1 | Silly Season (Oct 1 – Dec 15) | 72 |
-
-The baseline is then multiplied by a **Kalshi volume signal**: sports whose Kalshi market volume is in the top tercile get ×1.15 (cap 100), bottom tercile get ×0.90.
-
-### Kalshi Phase 3 Note
-
-Public market data (what Phase 1 and 2 use) requires no API key — it's the open endpoint.
-
-The `KALSHI_API_KEY` variable is reserved for Phase 3 features:
-1. Create an account at [kalshi.com](https://kalshi.com)
-2. Generate an API key at **kalshi.com/settings/api**
-3. Phase 3 will use it for portfolio data, order placement, and authenticated private markets
+| Variable | Value | Required? |
+|----------|-------|-----------|
+| `VITE_API_BASE_URL` | Render backend URL in prod; empty string locally | Yes in production |
+| `VITE_WS_URL` | `wss://your-render-url.onrender.com` in prod | Yes in production |
 
 ---
 
-## Tabs
+## Deployment
 
-| Tab | What it shows |
-|-----|---------------|
-| **Home** | 3-column: top Kalshi markets by volume · live scores · breaking headlines |
-| **Odds** | Full Kalshi feed, filter by sport, sort by Volume / Movement / Closing Soon |
-| **Tracker** | SVG arc heat gauge per sport (colors: gray→yellow→orange→red) + prediction market cards with related news. "Rumor" card style when no markets exist |
-| **News** | Breaking (enriched) · Scores & Recaps · Market Moves. Green badge on articles with a matching Kalshi market |
-| **Scores** | Live / Upcoming / Final game cards. Shows "Kalshi Market Odds" row when a matching prediction market is found |
+### Step 1 — Deploy backend to Render
 
----
+1. Push this repo to GitHub
+2. Go to [render.com](https://render.com) → New → Web Service
+3. Connect the repo, set **Root Directory** to `server`
+4. Build: `npm install` · Start: `node server.js` · Runtime: Node ≥ 18
+5. Add environment variables in the Render dashboard (see table above)
+6. Note your service URL: `https://sportspulse-api.onrender.com`
 
-## Deploying to Vercel (Frontend)
+> Render free tier supports WebSocket — the WS server shares the HTTP port, no extra config.
 
-1. Push to a GitHub repo
-2. Import in [vercel.com](https://vercel.com), set **Root Directory** to `client`
-3. Add environment variables:
-   - `VITE_API_BASE_URL` = your Render backend URL (e.g. `https://sportspulse-api.onrender.com`)
-   - `VITE_WS_URL` = `wss://sportspulse-api.onrender.com` (note `wss://` for HTTPS backends)
-4. Deploy
+### Step 2 — Deploy frontend to Vercel
 
----
+1. Go to [vercel.com](https://vercel.com) → New Project → Import from GitHub
+2. Set **Root Directory** to `client`
+3. Framework preset: **Vite**
+4. Add environment variables:
+   - `VITE_API_BASE_URL` = `https://sportspulse-api.onrender.com`
+   - `VITE_WS_URL` = `wss://sportspulse-api.onrender.com`
+5. Deploy
 
-## Deploying to Render (Backend)
+### Step 3 — Wire CORS back
 
-1. Push to GitHub
-2. New **Web Service** on [render.com](https://render.com)
-3. Set:
-   - **Build Command**: `npm install`
-   - **Start Command**: `npm start`
-   - **Runtime**: Node ≥ 18
-4. Environment variables in Render dashboard:
-   - `GUARDIAN_API_KEY` = your Guardian API key
-   - `FRONTEND_URL` = your Vercel frontend URL (for CORS)
-   - `NODE_ENV` = `production`
-5. Use `server/render.yaml` for one-click Blueprint deploys
+In the Render dashboard, set:
+- `FRONTEND_URL` = your Vercel URL (e.g. `https://sportspulse.vercel.app`)
+- `ALLOWED_ORIGIN` = same value
 
-> **WebSocket on Render**: Render's free tier supports WebSocket connections. The WS server shares the HTTP port — no extra config needed. Set `VITE_WS_URL=wss://your-render-url.onrender.com` in Vercel.
-
-After deploying, update both `VITE_API_BASE_URL` and `VITE_WS_URL` in Vercel to point at your Render URL, then redeploy the frontend.
+Redeploy the backend. Done.
 
 ---
 
@@ -158,22 +120,47 @@ After deploying, update both `VITE_API_BASE_URL` and `VITE_WS_URL` in Vercel to 
 | Route | Source | Cache TTL |
 |-------|--------|-----------|
 | `GET /api/kalshi/sports-markets` | Kalshi public API | 60s |
+| `GET /api/kalshi/portfolio` | Kalshi authenticated API | none |
 | `GET /api/scores/:sport` | ESPN / OpenF1 | 60s |
 | `GET /api/news` | Guardian API | 60s |
-| `GET /api/news/enriched` | Guardian + Kalshi cross-ref | 90s |
-| `GET /api/heat-scores` | Seasonal + Kalshi volume | 60s |
+| `GET /api/news/enriched` | Guardian + Kalshi cross-reference | 90s |
+| `GET /api/heat-scores` | Seasonal baseline + Kalshi volume | 60s |
 | `GET /api/tracker/:sport` | Kalshi + Guardian filtered | 60s |
-| `GET /api/health` | — | none |
-| `WS /` | Pushes every 30s | — |
+| `GET /health` | — | none |
+| `GET /api/ping` | — | none |
+| `WS /` | Push every 30s | — |
 
-**`:sport`** accepts: `nba`, `nfl`, `mlb`, `soccer`, `f1`, `tennis`
+`:sport` accepts: `nba` · `nfl` · `mlb` · `soccer` · `f1` · `tennis`
+
+---
+
+## Tabs
+
+| Tab | What it shows |
+|-----|---------------|
+| **Home** | Top Kalshi markets by volume · live scores · breaking headlines |
+| **Odds** | Full Kalshi feed — filter by sport, sort by Volume / Movement / Closing Soon |
+| **Tracker** | SVG arc heat gauge per sport (gray→yellow→orange→red) + market cards with related news |
+| **News** | Enriched feed with green "📈 Live Market" badge when a matching Kalshi market exists |
+| **Scores** | Live / Upcoming / Final cards with "KALSHI MARKET ODDS" row when a match is found |
+
+---
+
+## Phase Roadmap
+
+| Phase | Status | What shipped |
+|-------|--------|-------------|
+| **Phase 1** | ✅ | React + Vite + Tailwind frontend · Express backend · Kalshi, ESPN, Guardian, OpenF1 routes · 5-tab layout · 60s cache |
+| **Phase 2** | ✅ | Guardian API · News/Market cross-reference · Heat Score engine · Tracker cards · WebSocket live updates · Win probability on Scores · enriched News badges |
+| **Phase 3** | ✅ | Kalshi authenticated API layer (RSA-PSS signing) · `/api/kalshi/portfolio` · exponential-backoff WS reconnect · heartbeat pings · cold-start banner · keep-alive · mobile-responsive layout · share button |
+| **Phase 4** | 🔜 | Live trading from the dashboard — Kalshi order placement, portfolio positions, P&L tracker |
 
 ---
 
 ## Notes
 
-- Guardian API is free for non-commercial use with a developer key; no browser-side CORS issues
-- Kalshi public markets API has rate limits; the in-memory cache ensures at most 1 call per 60 seconds per endpoint
-- ESPN's public scoreboard API is unofficial — use for personal/demo projects only
-- All external calls have 8-second timeouts with graceful error fallbacks and mock data where applicable
-- The WebSocket server shares the Express HTTP port; no separate process or port needed
+- Kalshi public markets API requires no key — it's the open endpoint used in Phases 1–2
+- Guardian API is free for non-commercial developer use; rate limits are generous
+- ESPN scoreboard API is unofficial — for personal/demo projects only
+- All external calls have 8s timeouts with graceful mock fallbacks
+- Render free tier sleeps after 15 min inactivity; the keep-alive `/api/ping` (every 14 min) prevents this while the tab is open

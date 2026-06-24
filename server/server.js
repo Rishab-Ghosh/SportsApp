@@ -19,15 +19,16 @@ const allowedOrigins = [
   'http://localhost:4173',
   process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null,
   process.env.FRONTEND_URL || null,
+  process.env.ALLOWED_ORIGIN || null,
 ].filter(Boolean);
 
 app.use(cors({
   origin: (origin, callback) => {
-    if (!origin || allowedOrigins.some(o => origin.startsWith(o))) {
-      callback(null, true);
-    } else {
-      callback(null, true); // permissive for dev; tighten in prod via FRONTEND_URL
-    }
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.some(o => origin.startsWith(o))) return callback(null, true);
+    // In production, reject unknown origins; in dev allow all
+    if (process.env.NODE_ENV === 'production') return callback(new Error('CORS'));
+    callback(null, true);
   },
   methods: ['GET', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
@@ -41,7 +42,9 @@ app.use('/api/news', newsRoutes);
 app.use('/api/heat-scores', heatScoresRoutes);
 app.use('/api/tracker', trackerRoutes);
 
-app.get('/api/health', (_req, res) => res.json({ status: 'ok', ts: Date.now() }));
+app.get('/api/health', (_req, res) => res.json({ status: 'ok', uptime: process.uptime(), ts: Date.now() }));
+app.get('/health', (_req, res) => res.json({ status: 'ok', uptime: process.uptime() }));
+app.get('/api/ping', (_req, res) => res.json({ pong: true }));
 
 app.use((_req, res) => res.status(404).json({ error: 'Not found' }));
 
@@ -67,22 +70,22 @@ async function buildWsPayload() {
   };
 }
 
+async function sendUpdate(ws) {
+  if (ws.readyState !== ws.OPEN) return;
+  try {
+    const payload = await buildWsPayload();
+    ws.send(JSON.stringify(payload));
+  } catch (err) {
+    console.error('WS send error:', err.message);
+  }
+}
+
 wss.on('connection', (ws) => {
-  let interval = null;
+  ws.isAlive = true;
+  ws.on('pong', () => { ws.isAlive = true; });
 
-  const broadcast = async () => {
-    if (ws.readyState !== ws.OPEN) return;
-    try {
-      const payload = await buildWsPayload();
-      ws.send(JSON.stringify(payload));
-    } catch (err) {
-      console.error('WS broadcast error:', err.message);
-    }
-  };
-
-  // Send initial payload after a short delay (routes need to be warm)
-  setTimeout(broadcast, 500);
-  interval = setInterval(broadcast, 30000);
+  sendUpdate(ws);
+  const interval = setInterval(() => sendUpdate(ws), 30000);
 
   ws.on('close', () => clearInterval(interval));
   ws.on('error', () => {
@@ -90,6 +93,15 @@ wss.on('connection', (ws) => {
     ws.terminate();
   });
 });
+
+// Heartbeat: terminate stale connections every 45s
+setInterval(() => {
+  wss.clients.forEach(ws => {
+    if (ws.isAlive === false) return ws.terminate();
+    ws.isAlive = false;
+    ws.ping();
+  });
+}, 45000);
 
 httpServer.listen(PORT, () => console.log(`SportsPulse API running on :${PORT} (HTTP + WS)`));
 
