@@ -15,25 +15,37 @@ const { runScraper } = require('./lib/scraper');
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-const allowedOrigins = [
+const STATIC_ORIGINS = [
   'http://localhost:5173',
   'http://localhost:4173',
-  process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null,
-  process.env.FRONTEND_URL || null,
+  'http://localhost:3000',
+  process.env.VERCEL_URL    ? `https://${process.env.VERCEL_URL}` : null,
+  process.env.FRONTEND_URL  || null,
   process.env.ALLOWED_ORIGIN || null,
 ].filter(Boolean);
 
-app.use(cors({
+function isAllowedOrigin(origin) {
+  if (!origin) return true;                          // same-origin / server-to-server
+  if (STATIC_ORIGINS.includes(origin)) return true;
+  if (origin.endsWith('.vercel.app')) return true;   // all Vercel preview + production URLs
+  return false;
+}
+
+const corsOptions = {
   origin: (origin, callback) => {
-    if (!origin) return callback(null, true);
-    if (allowedOrigins.some(o => origin.startsWith(o))) return callback(null, true);
-    // In production, reject unknown origins; in dev allow all
-    if (process.env.NODE_ENV === 'production') return callback(new Error('CORS'));
-    callback(null, true);
+    if (isAllowedOrigin(origin)) return callback(null, true);
+    console.warn('[CORS] blocked origin:', origin);
+    callback(new Error(`CORS: origin not allowed — ${origin}`));
   },
-  methods: ['GET', 'OPTIONS'],
+  methods: ['GET', 'POST', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
-}));
+  credentials: false,
+  optionsSuccessStatus: 204,
+};
+
+// Handle OPTIONS preflight for every route before any other middleware
+app.options('*', cors(corsOptions));
+app.use(cors(corsOptions));
 
 app.use(express.json());
 
