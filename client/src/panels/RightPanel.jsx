@@ -158,10 +158,10 @@ function SportScores({ sport }) {
   const { data: marketsHttp } = useApi('/api/kalshi/sports-markets');
   const markets = wsData?.markets || marketsHttp?.markets || [];
 
-  const games = data?.games || [];
-  const live = games.filter(g => g.is_live);
-  const upcoming = games.filter(g => !g.is_live && !g.is_final).slice(0, 2);
-  const shown = [...live, ...upcoming].slice(0, 3);
+  const live     = data?.live     || [];
+  const upcoming = (data?.upcoming || []).slice(0, 2);
+  // Show live first; if none, show next 2 upcoming
+  const shown = live.length > 0 ? live.slice(0, 3) : upcoming;
 
   if (shown.length === 0) return null;
 
@@ -175,43 +175,58 @@ function SportScores({ sport }) {
   );
 }
 
+function fmtTime(iso) {
+  if (!iso) return null;
+  try { return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }); }
+  catch { return null; }
+}
+
 function ScoreRow({ game, markets }) {
-  const isLive = game.is_live;
-  const winMarket = useMemo(() => findWinMarket(game, markets), [game, markets]);
+  const isLive     = game.isLive     || game.is_live;
+  const isUpcoming = game.isUpcoming || (!game.is_live && !game.is_final && !game.isLive && !game.isFinal);
+  const winMarket  = useMemo(() => findWinMarket(game, markets), [game, markets]);
+  const home = game.home || game.home_team;
+  const away = game.away || game.away_team;
+  const homeScore = game.homeScore ?? game.home_score;
+  const awayScore = game.awayScore ?? game.away_score;
+  const startIso  = game.startTime  || game.start_time;
 
   return (
-    <div style={{
-      padding: '6px 12px',
-      borderBottom: '1px solid rgba(30,45,64,0.6)',
-    }}>
+    <div style={{ padding: '6px 12px', borderBottom: '1px solid rgba(30,45,64,0.6)' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 3 }}>
         {isLive && (
           <span style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
-            <span style={{
-              width: 5, height: 5, borderRadius: '50%', background: 'var(--red)',
-              animation: 'pulse 1s infinite',
-            }} />
+            <span style={{ width: 5, height: 5, borderRadius: '50%', background: 'var(--red)', animation: 'pulse 1s infinite' }} />
             <span style={{ fontFamily: 'var(--mono)', fontSize: 8, color: 'var(--red)', fontWeight: 700 }}>LIVE</span>
           </span>
         )}
-        <span style={{ fontFamily: 'var(--mono)', fontSize: 9, color: 'var(--text-muted)' }}>{game.status}</span>
+        {isLive && game.clock && (
+          <span style={{ fontFamily: 'var(--mono)', fontSize: 9, color: 'var(--text-muted)' }}>{game.clock}</span>
+        )}
+        {isUpcoming && startIso && (
+          <span style={{ fontFamily: 'var(--mono)', fontSize: 9, color: 'var(--text-secondary)' }}>{fmtTime(startIso)}</span>
+        )}
       </div>
 
       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 1 }}>
-        <span style={{ fontSize: 11, color: 'var(--text-secondary)', truncate: true, maxWidth: '80%', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>
-          {game.away_team}
+        <span style={{ fontSize: 11, color: 'var(--text-secondary)', maxWidth: '80%', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>
+          {away}
         </span>
-        <span style={{ fontFamily: 'var(--mono)', fontSize: 12, fontWeight: 700, color: 'var(--text-primary)' }}>
-          {game.away_score}
-        </span>
+        {!isUpcoming && (
+          <span style={{ fontFamily: 'var(--mono)', fontSize: 12, fontWeight: 700, color: 'var(--text-primary)' }}>
+            {awayScore}
+          </span>
+        )}
       </div>
       <div style={{ display: 'flex', justifyContent: 'space-between' }}>
         <span style={{ fontSize: 11, color: 'var(--text-secondary)', maxWidth: '80%', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>
-          {game.home_team}
+          {home}
         </span>
-        <span style={{ fontFamily: 'var(--mono)', fontSize: 12, fontWeight: 700, color: 'var(--text-primary)' }}>
-          {game.home_score}
-        </span>
+        {!isUpcoming && (
+          <span style={{ fontFamily: 'var(--mono)', fontSize: 12, fontWeight: 700, color: 'var(--text-primary)' }}>
+            {homeScore}
+          </span>
+        )}
       </div>
 
       {winMarket && (
