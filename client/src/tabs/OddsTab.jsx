@@ -64,6 +64,20 @@ function usePriceFlash(yes) {
   return flash;
 }
 
+function useMediaQuery(query) {
+  const [matches, setMatches] = useState(() => typeof window !== 'undefined' ? window.matchMedia(query).matches : false);
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined;
+    const mq = window.matchMedia(query);
+    const onChange = () => setMatches(mq.matches);
+    onChange();
+    mq.addEventListener?.('change', onChange);
+    return () => mq.removeEventListener?.('change', onChange);
+  }, [query]);
+  return matches;
+}
+
+
 // ── Main tab ─────────────────────────────────────────────────────────────────
 export default function OddsTab() {
   const { data, loading, error } = useApi('/api/kalshi/sports-markets');
@@ -72,6 +86,7 @@ export default function OddsTab() {
   const [sort, setSort]          = useState('Volume');
   const [showAll, setShowAll]    = useState(false);
   const prefersReduced = useReducedMotion();
+  const isMobile = useMediaQuery('(max-width: 639px)');
 
   // Fetch categories when a specific sport is selected
   const catUrl = filter !== 'All' ? `/api/kalshi/categories?sport=${filter}` : null;
@@ -115,8 +130,8 @@ export default function OddsTab() {
   return (
     <div>
       {/* ── Sport filter row ── */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, flexWrap: 'wrap', gap: 8 }}>
-        <div style={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: isMobile ? 'stretch' : 'center', marginBottom: 8, flexWrap: isMobile ? 'nowrap' : 'wrap', gap: 8, flexDirection: isMobile ? 'column' : 'row' }}>
+        <div className="scrollbar-hide" style={{ display: 'flex', gap: 4, flexWrap: 'nowrap', overflowX: 'auto', paddingBottom: 2 }}>
           {FILTERS.map(f => {
             const active = filter === f;
             const fsc = SPORT_COLORS[f];
@@ -135,7 +150,7 @@ export default function OddsTab() {
           })}
         </div>
 
-        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+        <div className="scrollbar-hide" style={{ display: 'flex', gap: 6, alignItems: 'center', overflowX: isMobile ? 'auto' : 'visible', paddingBottom: isMobile ? 2 : 0 }}>
           <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--text-muted)', letterSpacing: '0.1em' }}>SORT</span>
           {SORTS.map(s => (
             <button key={s} onClick={() => setSort(s)} style={{
@@ -226,7 +241,7 @@ export default function OddsTab() {
       )}
 
       {loading ? (
-        <LoadingSkeleton />
+        <LoadingSkeleton isMobile={isMobile} />
       ) : markets.length === 0 ? (
         <div style={{ textAlign: 'center', padding: '64px 0', fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-muted)', letterSpacing: '0.08em' }}>
           NO MARKETS FOR <span style={{ color: 'var(--text-secondary)' }}>{filter.toUpperCase()}</span>
@@ -236,27 +251,27 @@ export default function OddsTab() {
           {/* ── 12-col grid: hero + secondaries ── */}
           <div style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(12, 1fr)',
-            gap: 10,
+            gridTemplateColumns: isMobile ? '1fr' : 'repeat(12, 1fr)',
+            gap: isMobile ? 8 : 10,
             marginBottom: 10,
           }}>
             {/* Hero card — 8 cols */}
             {hero && (
-              <div style={{ gridColumn: 'span 8' }}>
+              <div style={{ gridColumn: isMobile ? '1 / -1' : 'span 8' }}>
                 <motion.div
                   key={`hero-${hero.id}`}
                   initial={prefersReduced ? false : { opacity: 0, scale: 0.97 }}
                   animate={{ opacity: 1, scale: 1 }}
                   transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
                 >
-                  <HeroCard market={hero} />
+                  <HeroCard market={hero} isMobile={isMobile} />
                 </motion.div>
               </div>
             )}
 
             {/* Secondary stack — 4 cols */}
             {secondary.length > 0 && (
-              <div style={{ gridColumn: 'span 4', display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <div style={{ gridColumn: isMobile ? '1 / -1' : 'span 4', display: 'flex', flexDirection: 'column', gap: 10 }}>
                 {secondary.map((m, i) => (
                   <motion.div
                     key={`sec-${m.id}`}
@@ -273,7 +288,9 @@ export default function OddsTab() {
           </div>
 
           {/* ── Dense list ── */}
-          {listItems.length > 0 && (
+          {listItems.length > 0 && isMobile ? (
+            <MobileMarketList markets={listItems} />
+          ) : listItems.length > 0 && (
             <div style={{
               border: '1px solid var(--border)',
               borderRadius: 2,
@@ -317,7 +334,7 @@ export default function OddsTab() {
 }
 
 // ── Hero Card (8-col) ─────────────────────────────────────────────────────────
-function HeroCard({ market }) {
+function HeroCard({ market, isMobile = false }) {
   const yes   = market.yes_price ?? 50;
   const no    = 100 - yes;
   const title = cleanTitle(market.title, market.event_ticker);
@@ -359,7 +376,7 @@ function HeroCard({ market }) {
 
         {/* Event title */}
         <p style={{
-          fontFamily: 'var(--font-display)', fontSize: 18, fontWeight: 800,
+          fontFamily: 'var(--font-display)', fontSize: isMobile ? 16 : 18, fontWeight: 800,
           color: 'var(--text-primary)', lineHeight: '1.2', marginBottom: 14,
           letterSpacing: '-0.01em',
           display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden',
@@ -371,7 +388,7 @@ function HeroCard({ market }) {
         <div style={{ display: 'flex', alignItems: 'flex-end', gap: 12, marginBottom: 10 }}>
           <div className={flash} style={{ display: 'flex', alignItems: 'baseline', gap: 4 }}>
             <span style={{
-              fontFamily: 'var(--font-hero)', fontSize: 64,
+              fontFamily: 'var(--font-hero)', fontSize: isMobile ? 50 : 64,
               color: 'var(--positive)', lineHeight: 1,
             }}>
               {yes}
@@ -410,9 +427,9 @@ function HeroCard({ market }) {
       <div
         id="hero-chart-slot"
         data-ticker={market.id}
-        style={{ flex: 1, minHeight: 140, borderTop: '1px solid var(--border)' }}
+        style={{ flex: 1, minHeight: isMobile ? 130 : 140, borderTop: '1px solid var(--border)' }}
       >
-        <HeroOddsChart ticker={market.id} eventTicker={market.event_ticker} sportColor={sc} />
+        <HeroOddsChart ticker={market.id} eventTicker={market.event_ticker} sportColor={sc} fallbackPrice={yes} />
       </div>
     </div>
   );
@@ -499,7 +516,7 @@ function SecondaryCard({ market }) {
             onClick={e => e.stopPropagation()}
           >
             <div style={{ borderTop: '1px solid var(--border)', padding: '8px 12px' }}>
-              <PriceChart marketId={market.id} height={74} />
+              <PriceChart marketId={market.id} height={74} fallbackPrice={yes} />
             </div>
           </motion.div>
         )}
@@ -586,15 +603,58 @@ function MarketRow({ market, index }) {
   );
 }
 
+
+function MobileMarketList({ markets }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      {markets.map(m => <MobileMarketCard key={m.id} market={m} />)}
+    </div>
+  );
+}
+
+function MobileMarketCard({ market }) {
+  const yes = market.yes_price ?? 50;
+  const no = 100 - yes;
+  const sc = sportColor(market.sport_tag);
+  const title = cleanTitle(market.title, market.event_ticker);
+  const { label: tl, urgent } = timeLeft(market.close_time);
+  return (
+    <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderTop: `2px solid ${sc}`, borderRadius: 2, padding: 10 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 7 }}>
+        <span style={{ fontFamily: 'var(--font-display)', fontSize: 9, fontWeight: 800, color: sc, letterSpacing: '0.1em' }}>{market.sport_tag}</span>
+        <span style={{ marginLeft: 'auto', fontFamily: 'var(--mono)', fontSize: 9, color: urgent ? 'var(--negative)' : 'var(--text-muted)' }}>{tl}</span>
+      </div>
+      <p style={{ fontFamily: 'var(--font-display)', fontSize: 13, fontWeight: 700, color: 'var(--text-secondary)', lineHeight: 1.3, marginBottom: 9 }}>{title}</p>
+      <div style={{ display: 'grid', gridTemplateColumns: '76px 1fr', gap: 10, alignItems: 'center' }}>
+        <div>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 4 }}>
+            <span style={{ fontFamily: 'var(--font-display)', fontSize: 32, fontWeight: 900, color: 'var(--positive)', lineHeight: 1 }}>{yes}</span>
+            <span style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--text-muted)' }}>¢ YES</span>
+          </div>
+          <div style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--negative)', marginTop: 2 }}>{no}¢ NO</div>
+        </div>
+        <PriceChart marketId={market.id} height={58} fallbackPrice={yes} />
+      </div>
+      <div style={{ height: 3, background: 'var(--border)', overflow: 'hidden', marginTop: 8 }}>
+        <div style={{ height: '100%', width: `${yes}%`, background: sc }} />
+      </div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 7, fontFamily: 'var(--mono)', fontSize: 9, color: 'var(--text-muted)' }}>
+        <span>VOL <span style={{ color: 'var(--text-secondary)' }}>{fmtVolume(market.volume)}</span></span>
+        <span>{tl}</span>
+      </div>
+    </div>
+  );
+}
+
 // ── Loading skeleton ──────────────────────────────────────────────────────────
-function LoadingSkeleton() {
+function LoadingSkeleton({ isMobile = false }) {
   return (
     <div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(12, 1fr)', gap: 10, marginBottom: 10 }}>
-        <div style={{ gridColumn: 'span 8' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(12, 1fr)', gap: 10, marginBottom: 10 }}>
+        <div style={{ gridColumn: isMobile ? '1 / -1' : 'span 8' }}>
           <div className="skeleton" style={{ height: 260, borderRadius: 2 }} />
         </div>
-        <div style={{ gridColumn: 'span 4', display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <div style={{ gridColumn: isMobile ? '1 / -1' : 'span 4', display: 'flex', flexDirection: 'column', gap: 10 }}>
           <div className="skeleton" style={{ flex: 1, borderRadius: 2 }} />
           <div className="skeleton" style={{ flex: 1, borderRadius: 2 }} />
         </div>

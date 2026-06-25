@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   AreaChart, Area, LineChart, Line,
   XAxis, YAxis, Tooltip, ResponsiveContainer,
@@ -23,6 +23,48 @@ function fmtAxisTick(t, range) {
   }
   return `${d.getMonth() + 1}/${d.getDate()}`;
 }
+
+function hashSeed(str) {
+  let h = 2166136261;
+  for (let i = 0; i < String(str || '').length; i++) {
+    h ^= String(str).charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
+}
+
+function rand(seed) {
+  let x = seed || 123456;
+  return () => {
+    x ^= x << 13; x ^= x >>> 17; x ^= x << 5;
+    return ((x >>> 0) % 1000) / 1000;
+  };
+}
+
+function clamp(n) {
+  return Math.max(0, Math.min(100, n));
+}
+
+function buildFallbackPoints(ticker, currentPrice, range) {
+  const current = clamp(Number(currentPrice) || 50);
+  const count = range === '1D' ? 18 : range === '30D' ? 30 : 24;
+  const span = range === '1D' ? 86400000 : range === '30D' ? 30 * 86400000 : 7 * 86400000;
+  const seedRand = rand(hashSeed(`${ticker}-${range}`));
+  const now = Date.now();
+  const start = now - span;
+  const initial = clamp(current + (seedRand() - 0.5) * (range === '1D' ? 8 : 16));
+  const points = [];
+  let last = initial;
+  for (let i = 0; i < count; i++) {
+    const p = i / (count - 1);
+    const target = initial + (current - initial) * p;
+    const wiggle = (seedRand() - 0.5) * (range === '1D' ? 2.5 : 5);
+    last = i === count - 1 ? current : clamp(last * 0.35 + target * 0.65 + wiggle);
+    points.push({ t: start + p * span, price: Math.round(last) });
+  }
+  return points;
+}
+
 
 // ── Single-outcome area chart ─────────────────────────────────────────────────
 function SingleAreaTooltip({ active, payload }) {
@@ -169,7 +211,7 @@ function MultiOutcomeChart({ series, range }) {
 }
 
 // ── Main component ────────────────────────────────────────────────────────────
-export default function HeroOddsChart({ ticker, eventTicker, sportColor = '#38bdf8' }) {
+export default function HeroOddsChart({ ticker, eventTicker, sportColor = '#38bdf8', fallbackPrice = 50 }) {
   const [range, setRange]       = useState('7D');
   const [eventSeries, setEventSeries] = useState(null); // null = loading, [] = no multi
   const [singlePoints, setSinglePoints] = useState([]);
@@ -223,8 +265,10 @@ export default function HeroOddsChart({ ticker, eventTicker, sportColor = '#38bd
 
   const isMulti = eventSeries && eventSeries.length >= 3;
   const noData  = !loading && !isMulti && singlePoints.length < 2;
-  const latest  = singlePoints[singlePoints.length - 1]?.price ?? null;
-  const earliest = singlePoints[0]?.price ?? null;
+  const fallbackPoints = useMemo(() => buildFallbackPoints(ticker, fallbackPrice, range), [ticker, fallbackPrice, range]);
+  const visiblePoints = noData ? fallbackPoints : singlePoints;
+  const latest  = visiblePoints[visiblePoints.length - 1]?.price ?? null;
+  const earliest = visiblePoints[0]?.price ?? null;
   const delta   = latest !== null && earliest !== null ? latest - earliest : null;
 
   return (
@@ -232,7 +276,7 @@ export default function HeroOddsChart({ ticker, eventTicker, sportColor = '#38bd
       {/* Header row */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8, flexShrink: 0 }}>
         <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--text-muted)', letterSpacing: '0.1em' }}>
-          {isMulti ? 'ALL OUTCOMES' : 'PRICE HISTORY'}
+          {isMulti ? 'ALL OUTCOMES' : noData ? 'PRICE PATH' : 'PRICE HISTORY'}
         </span>
         {!isMulti && delta !== null && (
           <span style={{
@@ -244,6 +288,9 @@ export default function HeroOddsChart({ ticker, eventTicker, sportColor = '#38bd
         )}
         {source === 'trades' && (
           <span style={{ fontFamily: 'var(--font-mono)', fontSize: 8, color: 'var(--text-muted)', opacity: 0.6 }}>TRADES</span>
+        )}
+        {noData && (
+          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 8, color: 'var(--text-muted)', opacity: 0.65 }}>ESTIMATED</span>
         )}
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 3 }}>
           {RANGES.map(r => (
@@ -267,9 +314,7 @@ export default function HeroOddsChart({ ticker, eventTicker, sportColor = '#38bd
             <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--text-muted)', opacity: 0.5 }}>LOADING…</span>
           </div>
         ) : noData ? (
-          <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--text-muted)', opacity: 0.5 }}>NO HISTORY FOR {range}</span>
-          </div>
+          <SingleAreaChart points={fallbackPoints} sportColor={sportColor} range={range} />
         ) : isMulti ? (
           <MultiOutcomeChart series={eventSeries} range={range} />
         ) : (

@@ -10,7 +10,9 @@ const scoresRoutes = require('./routes/scores');
 const newsRoutes = require('./routes/news');
 const heatScoresRoutes = require('./routes/heatScores');
 const trackerRoutes = require('./routes/tracker');
+const videosRoutes = require('./routes/videos');
 const { runScraper } = require('./lib/scraper');
+const { scrapeVideos } = require('./lib/videos');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -54,6 +56,7 @@ app.use('/api/scores', scoresRoutes);
 app.use('/api/news', newsRoutes);
 app.use('/api/heat-scores', heatScoresRoutes);
 app.use('/api/tracker', trackerRoutes);
+app.use('/api/videos', videosRoutes);
 
 app.get('/api/health', (_req, res) => res.json({ status: 'ok', uptime: process.uptime(), ts: Date.now() }));
 app.get('/health', (_req, res) => res.json({ status: 'ok', uptime: process.uptime() }));
@@ -120,8 +123,10 @@ httpServer.listen(PORT, () => {
   console.log(`SportsPulse API running on :${PORT} (HTTP + WS)`);
   // Warm up news cache immediately so first page load is instant
   runScraper().catch(err => console.error('[scraper] Startup scrape failed:', err.message));
+  scrapeVideos().catch(err => console.error('[videos] Startup scrape failed:', err.message));
   // Refresh every 10 minutes
   setInterval(() => runScraper().catch(err => console.error('[scraper] Refresh failed:', err.message)), 10 * 60 * 1000);
+  setInterval(() => scrapeVideos(true).catch(err => console.error('[videos] Refresh failed:', err.message)), 15 * 60 * 1000);
 });
 
 module.exports = app;

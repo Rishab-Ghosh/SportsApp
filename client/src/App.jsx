@@ -36,11 +36,27 @@ function heatColor(score) {
   return 'var(--text-muted)';
 }
 
+function useViewportWidth() {
+  const [width, setWidth] = useState(() => typeof window !== 'undefined' ? window.innerWidth : 1200);
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined;
+    const onResize = () => setWidth(window.innerWidth);
+    onResize();
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
+  return width;
+}
+
+
 export default function App() {
   const [activeTab, setActiveTab]     = useState('News');
   const [activeSport, setActiveSport] = useState('All');
   const [toastMsg, setToastMsg]       = useState('');
   const [slowBanner, setSlowBanner]   = useState(false);
+  const viewportWidth = useViewportWidth();
+  const isMobile = viewportWidth < 640;
+  const isCompact = viewportWidth < 1024;
 
   useEffect(() => {
     const ping = () => fetch(`${BASE}/api/ping`).catch(() => {});
@@ -65,21 +81,35 @@ export default function App() {
     <WebSocketProvider>
       <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', background: 'var(--bg-base)' }}>
         <Topbar
+          compact={isMobile}
           activeTab={activeTab}
           onTabChange={setActiveTab}
           onShare={() => navigator.clipboard.writeText(window.location.href).then(() => showToast('Link copied!'))}
         />
 
         {slowBanner && <ColdStartBanner onDismiss={dismissBanner} />}
-        <MarketTicker />
+        <MarketTicker compact={isMobile} />
 
-        <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
-          <LeftSidebar
-            activeSport={activeSport}
-            onSportChange={id => { setActiveSport(id); setActiveTab('News'); }}
-          />
+        <div style={{
+          display: 'flex', flex: 1, overflow: 'hidden',
+          flexDirection: isMobile ? 'column' : 'row',
+        }}>
+          {isMobile ? (
+            <SportRail
+              activeSport={activeSport}
+              onSportChange={id => { setActiveSport(id); setActiveTab('News'); }}
+            />
+          ) : (
+            <LeftSidebar
+              activeSport={activeSport}
+              onSportChange={id => { setActiveSport(id); setActiveTab('News'); }}
+            />
+          )}
 
-          <main style={{ flex: 1, overflowY: 'auto', minWidth: 0, position: 'relative' }}>
+          <main style={{
+            flex: 1, overflowY: 'auto', minWidth: 0, position: 'relative',
+            paddingBottom: isMobile ? 58 : 0,
+          }}>
             <AnimatePresence mode="wait">
               <motion.div
                 key={activeTab}
@@ -87,18 +117,21 @@ export default function App() {
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -3 }}
                 transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
-                style={{ height: '100%' }}
+                style={{ minHeight: isCompact ? 'auto' : '100%' }}
               >
                 {activeTab === 'News'    && <NewsFeed activeSport={activeSport} onDataLoaded={dismissBanner} />}
-                {activeTab === 'Odds'    && <div style={{ padding: 16 }}><OddsTab /></div>}
-                {activeTab === 'Tracker' && <div style={{ padding: 16 }}><TrackerTab /></div>}
-                {activeTab === 'Scores'  && <div style={{ padding: 16 }}><ScoresTab /></div>}
+                {activeTab === 'Odds'    && <div style={{ padding: isMobile ? 10 : 16 }}><OddsTab /></div>}
+                {activeTab === 'Tracker' && <div style={{ padding: isMobile ? 10 : 16 }}><TrackerTab /></div>}
+                {activeTab === 'Scores'  && <div style={{ padding: isMobile ? 10 : 16 }}><ScoresTab /></div>}
               </motion.div>
             </AnimatePresence>
+            {isCompact && <RightPanel compact stacked={isMobile} />}
           </main>
 
-          <RightPanel />
+          {!isCompact && <RightPanel />}
         </div>
+
+        {isMobile && <BottomNav activeTab={activeTab} onTabChange={setActiveTab} />}
 
         <AnimatePresence>
           {toastMsg && (
@@ -126,26 +159,26 @@ export default function App() {
 
 // ── Topbar ────────────────────────────────────────────────────────────────────
 
-function Topbar({ activeTab, onTabChange, onShare }) {
+function Topbar({ compact = false, activeTab, onTabChange, onShare }) {
   return (
     <header style={{
       borderTop: '3px solid var(--brand)',
-      height: 46, display: 'flex', alignItems: 'center',
+      height: compact ? 44 : 46, display: 'flex', alignItems: 'center',
       background: 'var(--bg-panel)',
       borderBottom: '1px solid var(--border)',
-      padding: '0 14px', flexShrink: 0, gap: 0,
+      padding: compact ? '0 10px' : '0 14px', flexShrink: 0, gap: 0,
     }}>
       {/* Wordmark */}
       <span style={{
-        fontFamily: 'var(--font-hero)', fontSize: 22,
+        fontFamily: 'var(--font-hero)', fontSize: compact ? 18 : 22,
         color: 'var(--brand)', letterSpacing: '0.04em', whiteSpace: 'nowrap',
-        marginRight: 20,
+        marginRight: compact ? 10 : 20,
       }}>
         SPORTSPULSE
       </span>
 
       {/* Nav — bottom-border underline style */}
-      <nav style={{ display: 'flex', height: '100%', flex: 1, justifyContent: 'center' }}>
+      {!compact && <nav style={{ display: 'flex', height: '100%', flex: 1, justifyContent: 'center' }}>
         {NAV_TABS.map(t => {
           const active = activeTab === t.id;
           return (
@@ -166,12 +199,12 @@ function Topbar({ activeTab, onTabChange, onShare }) {
             </button>
           );
         })}
-      </nav>
+      </nav>}
 
       {/* Right side */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginLeft: 'auto' }}>
-        <HeatTicker />
-        <div style={{ width: 1, height: 16, background: 'var(--border)' }} />
+        {!compact && <HeatTicker />}
+        {!compact && <div style={{ width: 1, height: 16, background: 'var(--border)' }} />}
         <WsStatus />
         <div style={{ width: 1, height: 16, background: 'var(--border)' }} />
         <button onClick={onShare} title="Copy link" style={{
@@ -185,7 +218,7 @@ function Topbar({ activeTab, onTabChange, onShare }) {
         >
           SHARE
         </button>
-        <LiveClock />
+        {!compact && <LiveClock />}
       </div>
     </header>
   );
@@ -255,11 +288,11 @@ function LiveClock() {
 
 // ── Market Ticker ─────────────────────────────────────────────────────────────
 
-function MarketTicker() {
+function MarketTicker({ compact = false }) {
   const wsData = useWebSocket();
   const { data: httpData } = useApi('/api/kalshi/sports-markets');
   const raw = wsData?.markets || httpData?.markets || [];
-  const items = raw.slice(0, 12);
+  const items = raw.slice(0, compact ? 8 : 12);
 
   if (!items.length) return null;
 
@@ -267,7 +300,7 @@ function MarketTicker() {
 
   return (
     <div className="ticker-container" style={{
-      height: 24, background: 'var(--bg-panel)',
+      height: compact ? 28 : 24, background: 'var(--bg-panel)',
       borderBottom: '1px solid var(--border)',
       overflow: 'hidden', flexShrink: 0,
     }}>
@@ -295,6 +328,66 @@ function MarketTicker() {
         })}
       </div>
     </div>
+  );
+}
+
+
+function SportRail({ activeSport, onSportChange }) {
+  const wsData = useWebSocket();
+  const { data: heatHttp } = useApi('/api/heat-scores');
+  const heatScores = wsData?.heatScores || heatHttp || {};
+
+  return (
+    <div className="scrollbar-hide" style={{
+      display: 'flex', gap: 6, overflowX: 'auto', padding: '7px 10px',
+      background: 'var(--bg-panel)', borderBottom: '1px solid var(--border)', flexShrink: 0,
+    }}>
+      {SPORTS.map(s => {
+        const score = s.id === 'All' ? null : heatScores[s.id];
+        const active = activeSport === s.id;
+        const color = s.color || 'var(--brand)';
+        return (
+          <button key={s.id} onClick={() => onSportChange(s.id)} style={{
+            minWidth: 74, minHeight: 44, padding: '6px 10px',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+            background: active ? 'rgba(255,255,255,0.05)' : 'transparent',
+            border: `1px solid ${active ? color : 'var(--border)'}`,
+            borderRadius: 2, color: active ? 'var(--text-primary)' : 'var(--text-secondary)',
+            fontFamily: 'var(--font-display)', fontSize: 11, fontWeight: 800,
+            letterSpacing: '0.06em', cursor: 'pointer', whiteSpace: 'nowrap',
+          }}>
+            <span>{s.id === 'All' ? 'ALL' : s.label}</span>
+            {score != null && <span style={{ fontFamily: 'var(--mono)', fontSize: 10, color: heatColor(score) }}>{score}</span>}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function BottomNav({ activeTab, onTabChange }) {
+  return (
+    <nav style={{
+      position: 'fixed', left: 0, right: 0, bottom: 0, height: 56,
+      display: 'grid', gridTemplateColumns: `repeat(${NAV_TABS.length}, 1fr)`,
+      background: 'rgba(19,19,19,0.96)', borderTop: '1px solid var(--border)', zIndex: 9000,
+      backdropFilter: 'blur(12px)',
+    }}>
+      {NAV_TABS.map(t => {
+        const active = activeTab === t.id;
+        return (
+          <button key={t.id} onClick={() => onTabChange(t.id)} style={{
+            minHeight: 44, background: active ? 'rgba(192,57,43,0.12)' : 'transparent',
+            border: 'none', borderTop: active ? '2px solid var(--brand)' : '2px solid transparent',
+            color: active ? 'var(--text-primary)' : 'var(--text-muted)',
+            fontFamily: 'var(--font-display)', fontSize: 11, fontWeight: 800,
+            letterSpacing: '0.08em', cursor: 'pointer',
+          }}>
+            {t.label}
+          </button>
+        );
+      })}
+    </nav>
   );
 }
 
@@ -338,9 +431,9 @@ function LeftSidebar({ activeSport, onSportChange }) {
         return (
           <button key={s.id} onClick={() => onSportChange(s.id)} style={{
             display: 'flex', alignItems: 'center', gap: 9,
-            padding: '8px 12px 8px 9px',
-            background: isActive ? 'rgba(255,255,255,0.03)' : 'transparent',
-            borderLeft: isActive ? `3px solid ${sportColor}` : '3px solid transparent',
+            padding: '8px 12px',
+            background: isActive ? 'rgba(255,255,255,0.05)' : 'transparent',
+            borderLeft: 'none',
             borderTop: 'none', borderRight: 'none', borderBottom: 'none',
             cursor: 'pointer', transition: 'background 0.1s',
             width: '100%',

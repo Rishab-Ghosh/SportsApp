@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { motion } from 'framer-motion';
+import WatchSection from './WatchSection';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || '';
 const RETRY_INTERVAL_MS = 5000;
@@ -108,6 +109,7 @@ export default function NewsFeed({ activeSport, onDataLoaded }) {
   return (
     <div style={{ padding: '12px 16px' }}>
       <SectionHeader sport={activeSport} total={total} />
+      <WatchSection activeSport={activeSport} />
       {loading ? (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           {Array.from({ length: 6 }).map((_, i) => <SkeletonStory key={i} />)}
