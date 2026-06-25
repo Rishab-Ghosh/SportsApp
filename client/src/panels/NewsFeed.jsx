@@ -204,7 +204,7 @@ function StoryCard({ card, index }) {
             )}
           </div>
 
-          {/* Headline — Barlow Condensed */}
+          {/* Headline — Bricolage Grotesque */}
           <p style={{
             fontFamily: 'var(--font-display)', fontSize: 16, fontWeight: 700,
             color: 'var(--text-primary)', lineHeight: '1.25', marginBottom: 4,

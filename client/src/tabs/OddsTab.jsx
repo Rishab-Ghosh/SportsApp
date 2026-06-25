@@ -2,7 +2,7 @@ import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { useApi } from '../hooks/useApi';
 import PriceChart from '../components/PriceChart';
-import { SkeletonCard } from '../components/Skeleton';
+import HeroOddsChart from '../components/HeroOddsChart';
 
 const FILTERS = ['All', 'NBA', 'NFL', 'MLB', 'Soccer', 'F1', 'Tennis'];
 const SORTS   = ['Volume', 'Score', 'Closing Soon'];
@@ -15,6 +15,10 @@ const SPORT_COLORS = {
   F1:     '#e74c3c',
   Tennis: '#f5c518',
 };
+
+function sportColor(tag) {
+  return SPORT_COLORS[tag] || 'var(--border-hover)';
+}
 
 function cleanTitle(title, event_ticker) {
   if (!title) return event_ticker || 'Unnamed market';
@@ -45,12 +49,27 @@ function timeLeft(ts) {
   return { label: `${Math.floor(diff / 60000)}M`, urgent: true };
 }
 
+// ── PriceFlash hook ───────────────────────────────────────────────────────────
+function usePriceFlash(yes) {
+  const prevRef = useRef(yes);
+  const [flash, setFlash] = useState('');
+  useEffect(() => {
+    if (prevRef.current !== yes) {
+      setFlash(yes > prevRef.current ? 'price-flash-up' : 'price-flash-down');
+      prevRef.current = yes;
+      const id = setTimeout(() => setFlash(''), 600);
+      return () => clearTimeout(id);
+    }
+  }, [yes]);
+  return flash;
+}
+
+// ── Main tab ─────────────────────────────────────────────────────────────────
 export default function OddsTab() {
   const { data, loading, error } = useApi('/api/kalshi/sports-markets');
-  const [filter, setFilter]   = useState('All');
-  const [sort, setSort]       = useState('Volume');
-  const [showAll, setShowAll] = useState(false);
-  const [expanded, setExpanded] = useState(null);
+  const [filter, setFilter]    = useState('All');
+  const [sort, setSort]        = useState('Volume');
+  const [showAll, setShowAll]  = useState(false);
   const prefersReduced = useReducedMotion();
 
   const { data: rawData } = useApi(showAll ? '/api/kalshi/sports-markets?showAll=1' : null);
@@ -71,31 +90,25 @@ export default function OddsTab() {
     return list;
   }, [sourceData, filter, sort]);
 
-  const totalVol = markets.reduce((s, m) => s + (m.volume || 0), 0);
-
-  const containerVariants = {
-    hidden: {},
-    show:   { transition: { staggerChildren: prefersReduced ? 0 : 0.03 } },
-  };
-  const cardVariants = {
-    hidden: { opacity: 0, y: prefersReduced ? 0 : 8 },
-    show:   { opacity: 1, y: 0, transition: { duration: 0.35, ease: [0.22, 1, 0.36, 1] } },
-  };
+  const hero      = markets[0] ?? null;
+  const secondary = markets.slice(1, 3);
+  const listItems = markets.slice(3);
+  const totalVol  = markets.reduce((s, m) => s + (m.volume || 0), 0);
 
   return (
     <div>
-      {/* Filter row */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14, flexWrap: 'wrap', gap: 8 }}>
+      {/* ── Filter row ── */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
         <div style={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
           {FILTERS.map(f => {
             const active = filter === f;
-            const sportColor = SPORT_COLORS[f];
+            const sc = SPORT_COLORS[f];
             return (
               <button key={f} onClick={() => setFilter(f)} style={{
                 padding: '4px 11px', borderRadius: 2, cursor: 'pointer',
-                background: active ? (sportColor ? `${sportColor}22` : 'rgba(56,189,248,0.12)') : 'transparent',
-                border: `1px solid ${active ? (sportColor || 'var(--accent)') : 'var(--border)'}`,
-                color: active ? (sportColor || 'var(--accent)') : 'var(--text-muted)',
+                background: active ? (sc ? `${sc}22` : 'rgba(56,189,248,0.12)') : 'transparent',
+                border: `1px solid ${active ? (sc || 'var(--accent)') : 'var(--border)'}`,
+                color: active ? (sc || 'var(--accent)') : 'var(--text-muted)',
                 fontFamily: 'var(--font-display)', fontSize: 11, fontWeight: 700,
                 letterSpacing: '0.08em', transition: 'all 0.1s',
               }}>
@@ -106,205 +119,431 @@ export default function OddsTab() {
         </div>
 
         <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-          <span style={{ fontFamily: 'var(--mono)', fontSize: 9, color: 'var(--text-muted)', letterSpacing: '0.1em' }}>SORT</span>
+          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--text-muted)', letterSpacing: '0.1em' }}>SORT</span>
           {SORTS.map(s => (
             <button key={s} onClick={() => setSort(s)} style={{
               padding: '3px 9px', borderRadius: 2, cursor: 'pointer',
               background: sort === s ? 'rgba(56,189,248,0.1)' : 'transparent',
               border: `1px solid ${sort === s ? 'rgba(56,189,248,0.4)' : 'var(--border)'}`,
               color: sort === s ? 'var(--accent)' : 'var(--text-muted)',
-              fontFamily: 'var(--mono)', fontSize: 10, transition: 'all 0.1s',
+              fontFamily: 'var(--font-mono)', fontSize: 10, transition: 'all 0.1s',
             }}>
               {s}
             </button>
           ))}
-        </div>
-      </div>
-
-      {/* Stats bar */}
-      <div style={{
-        display: 'flex', alignItems: 'center', gap: 20, marginBottom: 14,
-        padding: '7px 12px', background: 'var(--bg-card)',
-        border: '1px solid var(--border)', borderRadius: 2,
-        fontFamily: 'var(--mono)', fontSize: 10,
-      }}>
-        <div>
-          <span style={{ color: 'var(--text-muted)', letterSpacing: '0.08em' }}>MARKETS </span>
-          <span style={{ color: 'var(--accent)', fontWeight: 700 }}>{markets.length}</span>
-        </div>
-        <div>
-          <span style={{ color: 'var(--text-muted)', letterSpacing: '0.08em' }}>VOLUME </span>
-          <span style={{ color: 'var(--positive)', fontWeight: 700 }}>{fmtVolume(totalVol)}</span>
-        </div>
-        <div>
-          <span style={{ color: 'var(--text-muted)', letterSpacing: '0.08em' }}>FILTER </span>
-          <span style={{ color: 'var(--text-secondary)', fontWeight: 700 }}>{filter.toUpperCase()}</span>
-        </div>
-        <button
-          onClick={() => setShowAll(v => !v)}
-          style={{
-            marginLeft: 'auto', padding: '2px 8px', borderRadius: 2, cursor: 'pointer',
+          <button onClick={() => setShowAll(v => !v)} style={{
+            padding: '3px 9px', borderRadius: 2, cursor: 'pointer',
             border: `1px solid ${showAll ? 'rgba(249,115,22,0.5)' : 'var(--border)'}`,
             background: showAll ? 'rgba(249,115,22,0.1)' : 'transparent',
             color: showAll ? 'var(--orange)' : 'var(--text-muted)',
-            fontFamily: 'var(--mono)', fontSize: 9, letterSpacing: '0.08em',
-          }}
-        >
-          {showAll ? 'FILTER ON' : 'SHOW ALL'}
-        </button>
+            fontFamily: 'var(--font-mono)', fontSize: 9, letterSpacing: '0.08em',
+          }}>
+            {showAll ? 'FILTERED' : 'ALL'}
+          </button>
+        </div>
+      </div>
+
+      {/* ── Stats bar ── */}
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 18, marginBottom: 14,
+        padding: '6px 12px', background: 'var(--bg-card)',
+        border: '1px solid var(--border)', borderRadius: 2,
+        fontFamily: 'var(--font-mono)', fontSize: 10,
+      }}>
+        <span style={{ color: 'var(--text-muted)', letterSpacing: '0.08em' }}>
+          MARKETS <span style={{ color: 'var(--accent)', fontWeight: 700 }}>{markets.length}</span>
+        </span>
+        <span style={{ color: 'var(--text-muted)', letterSpacing: '0.08em' }}>
+          VOL <span style={{ color: 'var(--positive)', fontWeight: 700 }}>{fmtVolume(totalVol)}</span>
+        </span>
+        {filter !== 'All' && (
+          <span style={{ color: sportColor(filter), fontFamily: 'var(--font-display)', fontSize: 11, fontWeight: 700, letterSpacing: '0.08em' }}>
+            {filter}
+          </span>
+        )}
       </div>
 
       {error && (
-        <div style={{ padding: '8px 12px', marginBottom: 12, background: 'rgba(231,76,60,0.08)', border: '1px solid rgba(231,76,60,0.25)', borderRadius: 2, fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--negative)' }}>
-          API Error: {error}
+        <div style={{ padding: '8px 12px', marginBottom: 12, background: 'rgba(231,76,60,0.08)', border: '1px solid rgba(231,76,60,0.25)', borderRadius: 2, fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--negative)' }}>
+          {error}
         </div>
       )}
 
       {loading ? (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 10 }}>
-          {Array.from({ length: 6 }).map((_, i) => <SkeletonCard key={i} lines={5} />)}
-        </div>
+        <LoadingSkeleton />
       ) : markets.length === 0 ? (
-        <div style={{ textAlign: 'center', padding: '64px 0', fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--text-muted)', letterSpacing: '0.08em' }}>
+        <div style={{ textAlign: 'center', padding: '64px 0', fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-muted)', letterSpacing: '0.08em' }}>
           NO MARKETS FOR <span style={{ color: 'var(--text-secondary)' }}>{filter.toUpperCase()}</span>
         </div>
       ) : (
-        <motion.div
-          style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 10 }}
-          variants={containerVariants}
-          initial="hidden"
-          animate="show"
-          key={`${filter}-${sort}-${showAll}`}
-        >
-          {markets.map(m => (
-            <motion.div key={m.id} variants={cardVariants}>
-              <MarketCard
-                market={m}
-                isExpanded={expanded === m.id}
-                onToggle={() => setExpanded(expanded === m.id ? null : m.id)}
-              />
-            </motion.div>
-          ))}
-        </motion.div>
+        <div>
+          {/* ── 12-col grid: hero + secondaries ── */}
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(12, 1fr)',
+            gap: 10,
+            marginBottom: 10,
+          }}>
+            {/* Hero card — 8 cols */}
+            {hero && (
+              <div style={{ gridColumn: 'span 8' }}>
+                <motion.div
+                  key={`hero-${hero.id}`}
+                  initial={prefersReduced ? false : { opacity: 0, scale: 0.97 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
+                >
+                  <HeroCard market={hero} />
+                </motion.div>
+              </div>
+            )}
+
+            {/* Secondary stack — 4 cols */}
+            {secondary.length > 0 && (
+              <div style={{ gridColumn: 'span 4', display: 'flex', flexDirection: 'column', gap: 10 }}>
+                {secondary.map((m, i) => (
+                  <motion.div
+                    key={`sec-${m.id}`}
+                    initial={prefersReduced ? false : { opacity: 0, x: 8 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ duration: 0.28, delay: prefersReduced ? 0 : 0.06 * (i + 1), ease: [0.22, 1, 0.36, 1] }}
+                    style={{ flex: 1 }}
+                  >
+                    <SecondaryCard market={m} />
+                  </motion.div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* ── Dense list ── */}
+          {listItems.length > 0 && (
+            <div style={{
+              border: '1px solid var(--border)',
+              borderRadius: 2,
+              overflow: 'hidden',
+            }}>
+              {/* List header */}
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: '8px 1fr 160px 52px 68px 46px',
+                gap: 0,
+                padding: '6px 12px',
+                background: 'var(--bg-card)',
+                borderBottom: '1px solid var(--border)',
+              }}>
+                {['', 'MARKET', 'PROBABILITY', 'YES', 'VOLUME', 'CLOSES'].map((h, i) => (
+                  <span key={i} style={{
+                    fontFamily: 'var(--font-mono)', fontSize: 9,
+                    color: 'var(--text-muted)', letterSpacing: '0.1em',
+                    textAlign: i > 1 ? 'right' : 'left',
+                  }}>
+                    {h}
+                  </span>
+                ))}
+              </div>
+              {listItems.map((m, i) => (
+                <motion.div
+                  key={`row-${m.id}`}
+                  initial={prefersReduced ? false : { opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={{ duration: 0.18, delay: prefersReduced ? 0 : Math.min(i * 0.02, 0.4), ease: 'easeOut' }}
+                >
+                  <MarketRow market={m} index={i} />
+                </motion.div>
+              ))}
+            </div>
+          )}
+        </div>
       )}
     </div>
   );
 }
 
-function MarketCard({ market, isExpanded, onToggle }) {
-  const { label: tl, urgent } = timeLeft(market.close_time);
+// ── Hero Card (8-col) ─────────────────────────────────────────────────────────
+function HeroCard({ market }) {
   const yes   = market.yes_price ?? 50;
   const no    = 100 - yes;
   const title = cleanTitle(market.title, market.event_ticker);
-  const sportColor = SPORT_COLORS[market.sport_tag];
-
-  const prevRef = useRef(yes);
-  const [flash, setFlash] = useState('');
-  useEffect(() => {
-    if (prevRef.current !== yes) {
-      setFlash(yes > prevRef.current ? 'price-flash-up' : 'price-flash-down');
-      prevRef.current = yes;
-      const id = setTimeout(() => setFlash(''), 700);
-      return () => clearTimeout(id);
-    }
-  }, [yes]);
+  const sc    = sportColor(market.sport_tag);
+  const flash = usePriceFlash(yes);
+  const { label: tl, urgent } = timeLeft(market.close_time);
 
   return (
-    <div
-      style={{
-        background: 'var(--bg-card)',
-        border: `1px solid ${isExpanded ? 'rgba(56,189,248,0.35)' : 'var(--border)'}`,
-        borderTop: `2px solid ${sportColor || 'var(--border-hover)'}`,
-        borderRadius: 2, cursor: 'pointer', overflow: 'hidden',
-        transition: 'border-color 0.12s, transform 0.12s',
-        transform: 'translateY(0)',
-      }}
-      onMouseEnter={e => { if (!isExpanded) { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.borderRightColor = 'var(--border-hover)'; e.currentTarget.style.borderBottomColor = 'var(--border-hover)'; e.currentTarget.style.borderLeftColor = 'var(--border-hover)'; }}}
-      onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)'; const c = isExpanded ? 'rgba(56,189,248,0.35)' : 'var(--border)'; e.currentTarget.style.borderRightColor = c; e.currentTarget.style.borderBottomColor = c; e.currentTarget.style.borderLeftColor = c; }}
-      onClick={onToggle}
-    >
-
-      <div style={{ padding: '12px 12px 10px 10px' }}>
-        {/* Sport tag + title */}
-        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6, marginBottom: 10 }}>
-          <div style={{ flexShrink: 0, marginTop: 1 }}>
-            <span style={{
-              fontFamily: 'var(--font-display)', fontSize: 9, fontWeight: 800,
-              letterSpacing: '0.1em', color: sportColor || 'var(--text-muted)',
-              display: 'block',
-            }}>
-              {market.sport_tag}
-            </span>
-          </div>
-          <p style={{
-            fontSize: 12, color: 'var(--text-secondary)', lineHeight: '1.4',
-            fontFamily: 'var(--font-sans)', flex: 1, minWidth: 0,
-            display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden',
+    <div style={{
+      background: 'var(--bg-card)',
+      border: '1px solid var(--border)',
+      borderTop: `2px solid ${sc}`,
+      borderRadius: 2,
+      overflow: 'hidden',
+      height: '100%',
+      display: 'flex',
+      flexDirection: 'column',
+    }}>
+      <div style={{ padding: '14px 16px 12px' }}>
+        {/* Top row: sport + chip */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+          <span style={{
+            fontFamily: 'var(--font-display)', fontSize: 10, fontWeight: 700,
+            color: sc, letterSpacing: '0.1em',
           }}>
-            {title}
-          </p>
+            {market.sport_tag}
+          </span>
+          <span style={{
+            fontFamily: 'var(--font-mono)', fontSize: 8, fontWeight: 700,
+            color: 'var(--text-muted)', background: 'var(--border)',
+            borderRadius: 2, padding: '1px 6px', letterSpacing: '0.1em',
+          }}>
+            #1 BY VOLUME
+          </span>
+          <span style={{ marginLeft: 'auto', fontFamily: 'var(--font-mono)', fontSize: 9, color: urgent ? 'var(--negative)' : 'var(--text-muted)' }}>
+            {tl}
+          </span>
         </div>
 
-        {/* YES price hero — Barlow Condensed */}
-        <div style={{ display: 'flex', alignItems: 'flex-end', gap: 10, marginBottom: 8 }}>
-          <div className={flash} style={{ borderRadius: 2 }}>
+        {/* Event title */}
+        <p style={{
+          fontFamily: 'var(--font-display)', fontSize: 18, fontWeight: 800,
+          color: 'var(--text-primary)', lineHeight: '1.2', marginBottom: 14,
+          letterSpacing: '-0.01em',
+          display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden',
+        }}>
+          {title}
+        </p>
+
+        {/* Anton YES price + NO */}
+        <div style={{ display: 'flex', alignItems: 'flex-end', gap: 12, marginBottom: 10 }}>
+          <div className={flash} style={{ display: 'flex', alignItems: 'baseline', gap: 4 }}>
             <span style={{
-              fontFamily: 'var(--font-display)', fontWeight: 900,
-              fontSize: 36, color: 'var(--positive)', lineHeight: 1, letterSpacing: '-0.01em',
+              fontFamily: 'var(--font-hero)', fontSize: 64,
+              color: 'var(--positive)', lineHeight: 1,
             }}>
               {yes}
             </span>
-            <span style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--text-muted)', marginLeft: 2 }}>¢</span>
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 14, color: 'var(--text-muted)', marginBottom: 6 }}>¢ YES</span>
           </div>
-          <div style={{ marginBottom: 4 }}>
-            <div style={{ fontFamily: 'var(--font-display)', fontSize: 9, fontWeight: 700, color: 'var(--positive)', letterSpacing: '0.1em' }}>YES</div>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 3, marginBottom: 6, marginLeft: 8 }}>
+            <span style={{
+              fontFamily: 'var(--font-display)', fontSize: 28, fontWeight: 600,
+              color: 'var(--negative)', lineHeight: 1,
+            }}>
+              {no}
+            </span>
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-muted)' }}>¢ NO</span>
           </div>
-          <div style={{ marginLeft: 'auto', textAlign: 'right', marginBottom: 4 }}>
-            <span style={{ fontFamily: 'var(--font-display)', fontSize: 22, fontWeight: 700, color: 'var(--negative)', letterSpacing: '-0.01em' }}>{no}</span>
-            <span style={{ fontFamily: 'var(--mono)', fontSize: 9, color: 'var(--text-muted)', marginLeft: 2 }}>¢ NO</span>
+          <div style={{ marginLeft: 'auto', marginBottom: 6 }}>
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-muted)', letterSpacing: '0.06em' }}>
+              VOL <span style={{ color: 'var(--text-secondary)', fontWeight: 700 }}>{fmtVolume(market.volume)}</span>
+            </span>
           </div>
         </div>
 
         {/* Probability bar */}
-        <div style={{ height: 2, background: 'var(--border)', overflow: 'hidden', marginBottom: 8 }}>
+        <div style={{ height: 2, background: 'var(--border)', overflow: 'hidden', marginBottom: 14 }}>
           <div style={{
             height: '100%', width: '100%',
-            background: sportColor || 'var(--accent)',
+            background: sc,
             transformOrigin: 'left',
             transform: `scaleX(${yes / 100})`,
             transition: 'transform 0.4s ease-out',
           }} />
         </div>
-
-        {/* Metadata */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontFamily: 'var(--mono)', fontSize: 9, color: 'var(--text-muted)', letterSpacing: '0.06em' }}>
-          <span>VOL <span style={{ color: 'var(--text-secondary)' }}>{fmtVolume(market.volume)}</span></span>
-          <span style={{ color: urgent ? 'var(--negative)' : 'var(--text-muted)', fontWeight: urgent ? 700 : 400 }}>
-            ⏱ {tl}
-          </span>
-        </div>
       </div>
 
-      {/* Expanded chart */}
+      {/* Hero chart — Phase 8.1 */}
+      <div
+        id="hero-chart-slot"
+        data-ticker={market.id}
+        style={{ flex: 1, minHeight: 140, borderTop: '1px solid var(--border)' }}
+      >
+        <HeroOddsChart ticker={market.id} sportColor={sc} />
+      </div>
+    </div>
+  );
+}
+
+// ── Secondary Card (4-col) ────────────────────────────────────────────────────
+function SecondaryCard({ market }) {
+  const yes   = market.yes_price ?? 50;
+  const no    = 100 - yes;
+  const title = cleanTitle(market.title, market.event_ticker);
+  const sc    = sportColor(market.sport_tag);
+  const flash = usePriceFlash(yes);
+  const [expanded, setExpanded] = useState(false);
+  const { label: tl, urgent } = timeLeft(market.close_time);
+
+  return (
+    <div
+      style={{
+        background: 'var(--bg-card)',
+        border: '1px solid var(--border)',
+        borderTop: `2px solid ${sc}`,
+        borderRadius: 2,
+        cursor: 'pointer',
+        overflow: 'hidden',
+        flex: 1,
+        display: 'flex',
+        flexDirection: 'column',
+      }}
+      onClick={() => setExpanded(v => !v)}
+      onMouseEnter={e => e.currentTarget.style.borderColor = 'var(--border-hover)'}
+      onMouseLeave={e => e.currentTarget.style.borderColor = 'var(--border)'}
+    >
+      <div style={{ padding: '11px 12px 10px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 7 }}>
+          <span style={{ fontFamily: 'var(--font-display)', fontSize: 9, fontWeight: 700, color: sc, letterSpacing: '0.1em' }}>
+            {market.sport_tag}
+          </span>
+          <span style={{ marginLeft: 'auto', fontFamily: 'var(--font-mono)', fontSize: 8, color: urgent ? 'var(--negative)' : 'var(--text-muted)' }}>
+            {tl}
+          </span>
+        </div>
+
+        <p style={{
+          fontFamily: 'var(--font-display)', fontSize: 13, fontWeight: 700,
+          color: 'var(--text-secondary)', lineHeight: '1.3', marginBottom: 10,
+          display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden',
+        }}>
+          {title}
+        </p>
+
+        <div className={flash} style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginBottom: 8 }}>
+          <span style={{
+            fontFamily: 'var(--font-display)', fontSize: 32, fontWeight: 800,
+            color: 'var(--positive)', lineHeight: 1, letterSpacing: '-0.01em',
+          }}>
+            {yes}
+          </span>
+          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-muted)' }}>¢ YES</span>
+          <span style={{ marginLeft: 'auto', fontFamily: 'var(--font-display)', fontSize: 18, fontWeight: 600, color: 'var(--negative)' }}>{no}</span>
+          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--text-muted)' }}>¢</span>
+        </div>
+
+        <div style={{ height: 2, background: 'var(--border)', overflow: 'hidden', marginBottom: 8 }}>
+          <div style={{
+            height: '100%', width: '100%', background: sc,
+            transformOrigin: 'left', transform: `scaleX(${yes / 100})`,
+            transition: 'transform 0.4s ease-out',
+          }} />
+        </div>
+
+        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--text-muted)', letterSpacing: '0.06em' }}>
+          VOL <span style={{ color: 'var(--text-secondary)' }}>{fmtVolume(market.volume)}</span>
+        </span>
+      </div>
+
       <AnimatePresence>
-        {isExpanded && (
+        {expanded && (
           <motion.div
             initial={{ height: 0, opacity: 0 }}
-            animate={{ height: 'auto', opacity: 1 }}
+            animate={{ height: 90, opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+            transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
             style={{ overflow: 'hidden' }}
             onClick={e => e.stopPropagation()}
           >
-            <div style={{ borderTop: '1px solid var(--border)', padding: '10px 12px 12px' }}>
-              <div style={{ fontFamily: 'var(--font-display)', fontSize: 9, fontWeight: 700, color: 'var(--text-muted)', letterSpacing: '0.12em', marginBottom: 8 }}>
-                PRICE HISTORY · 7D
-              </div>
-              <PriceChart marketId={market.id} height={110} showAxes />
+            <div style={{ borderTop: '1px solid var(--border)', padding: '8px 12px' }}>
+              <PriceChart marketId={market.id} height={74} />
             </div>
           </motion.div>
         )}
       </AnimatePresence>
+    </div>
+  );
+}
+
+// ── Market Row (dense list) ───────────────────────────────────────────────────
+function MarketRow({ market, index }) {
+  const yes  = market.yes_price ?? 50;
+  const title = cleanTitle(market.title, market.event_ticker);
+  const sc   = sportColor(market.sport_tag);
+  const flash = usePriceFlash(yes);
+  const { label: tl, urgent } = timeLeft(market.close_time);
+  const even = index % 2 === 0;
+
+  return (
+    <div style={{
+      display: 'grid',
+      gridTemplateColumns: '8px 1fr 160px 52px 68px 46px',
+      gap: 0,
+      alignItems: 'center',
+      padding: '7px 12px',
+      background: even ? 'var(--bg-card)' : 'transparent',
+      borderBottom: '1px solid rgba(40,40,40,0.6)',
+      transition: 'background 0.08s',
+      cursor: 'default',
+    }}
+    onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-card-hover)'}
+    onMouseLeave={e => e.currentTarget.style.background = even ? 'var(--bg-card)' : 'transparent'}
+    >
+      {/* Sport dot */}
+      <span style={{ width: 4, height: 4, borderRadius: '50%', background: sc, flexShrink: 0, display: 'inline-block' }} />
+
+      {/* Title */}
+      <span style={{
+        fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--text-secondary)',
+        overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis',
+        paddingRight: 12,
+      }}>
+        {title}
+      </span>
+
+      {/* Probability bar */}
+      <div style={{ height: 2, background: 'var(--border)', overflow: 'hidden', borderRadius: 0 }}>
+        <div style={{
+          height: '100%', width: '100%', background: sc,
+          transformOrigin: 'left', transform: `scaleX(${yes / 100})`,
+          transition: 'transform 0.4s ease-out',
+        }} />
+      </div>
+
+      {/* YES % */}
+      <div className={flash} style={{ textAlign: 'right', paddingRight: 10 }}>
+        <span style={{
+          fontFamily: 'var(--font-mono)', fontSize: 12, fontWeight: 700,
+          color: yes > 65 ? 'var(--positive)' : yes < 35 ? 'var(--negative)' : 'var(--text-primary)',
+          fontVariantNumeric: 'tabular-nums',
+        }}>
+          {yes}¢
+        </span>
+      </div>
+
+      {/* Volume */}
+      <span style={{
+        fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-muted)',
+        textAlign: 'right', paddingRight: 10,
+        fontVariantNumeric: 'tabular-nums',
+      }}>
+        {fmtVolume(market.volume)}
+      </span>
+
+      {/* Close time */}
+      <span style={{
+        fontFamily: 'var(--font-mono)', fontSize: 10,
+        color: urgent ? 'var(--negative)' : 'var(--text-muted)',
+        textAlign: 'right',
+        fontVariantNumeric: 'tabular-nums',
+      }}>
+        {tl}
+      </span>
+    </div>
+  );
+}
+
+// ── Loading skeleton ──────────────────────────────────────────────────────────
+function LoadingSkeleton() {
+  return (
+    <div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(12, 1fr)', gap: 10, marginBottom: 10 }}>
+        <div style={{ gridColumn: 'span 8' }}>
+          <div className="skeleton" style={{ height: 260, borderRadius: 2 }} />
+        </div>
+        <div style={{ gridColumn: 'span 4', display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <div className="skeleton" style={{ flex: 1, borderRadius: 2 }} />
+          <div className="skeleton" style={{ flex: 1, borderRadius: 2 }} />
+        </div>
+      </div>
+      <div className="skeleton" style={{ height: 200, borderRadius: 2 }} />
     </div>
   );
 }

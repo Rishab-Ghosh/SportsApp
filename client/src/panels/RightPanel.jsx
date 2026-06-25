@@ -85,10 +85,10 @@ function KalshiCard({ market }) {
         {market.title}
       </p>
 
-      {/* YES price in display font */}
+      {/* YES price */}
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 5, marginBottom: 5 }}>
         <span style={{
-          fontFamily: 'var(--font-display)', fontSize: 24, fontWeight: 900,
+          fontFamily: 'var(--font-display)', fontSize: 24, fontWeight: 800,
           color: 'var(--positive)', lineHeight: 1, letterSpacing: '-0.01em',
         }}>
           {yes}

@@ -22,9 +22,11 @@ export default {
         primary:      '#ede9e4',
       },
       fontFamily: {
-        display: ['"Barlow Condensed"', 'Oswald', 'sans-serif'],
-        mono:    ['"JetBrains Mono"', '"Fira Code"', 'monospace'],
-        sans:    ['"Space Grotesk"', 'system-ui', 'sans-serif'],
+        hero:    ['Anton', 'Impact', 'sans-serif'],
+        display: ['"Bricolage Grotesque"', 'system-ui', 'sans-serif'],
+        body:    ['Geist', '"DM Sans"', 'system-ui', 'sans-serif'],
+        mono:    ['"Geist Mono"', '"JetBrains Mono"', 'monospace'],
+        sans:    ['Geist', '"DM Sans"', 'system-ui', 'sans-serif'],
       },
       borderRadius: {
         DEFAULT: '2px',

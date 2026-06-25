@@ -30,9 +30,26 @@
   --gold:     #c9a227;
 
   /* ── Typography ─────────────────────────────────────────────── */
-  --font-display: 'Barlow Condensed', 'Oswald', sans-serif;
-  --font-sans:    'Space Grotesk', system-ui, sans-serif;
-  --font-mono:    'JetBrains Mono', 'Fira Code', monospace;
+  /* Anton 400 — single biggest number per view only (hero price, heat index, wordmark) */
+  --font-hero:    'Anton', 'Impact', sans-serif;
+  /* Bricolage Grotesque — headlines, team names, card titles, labels */
+  --font-display: 'Bricolage Grotesque', system-ui, sans-serif;
+  /* Geist — body text, summaries, descriptions */
+  --font-body:    'Geist', 'DM Sans', system-ui, sans-serif;
+  /* Geist Mono — all odds, prices, volumes, scores, times */
+  --font-mono:    'Geist Mono', 'JetBrains Mono', monospace;
+  /* Aliases */
+  --font-sans:    var(--font-body);
+
+  /* ── Modular scale (1.333) ───────────────────────────────────── */
+  --text-xs:   12px;
+  --text-sm:   14px;
+  --text-base: 16px;
+  --text-lg:   21px;
+  --text-xl:   28px;
+  --text-2xl:  37px;
+  --text-3xl:  50px;
+  --text-hero: 67px;
 
   /* ── Easing ──────────────────────────────────────────────────── */
   --ease-out: cubic-bezier(0.22, 1, 0.36, 1);

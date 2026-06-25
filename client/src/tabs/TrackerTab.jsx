@@ -134,78 +134,61 @@ function HeatPanel({ sport, score, description, liveFromWs }) {
     <div style={{
       background: 'var(--bg-card)', border: '1px solid var(--border)',
       borderTop: `2px solid ${sport.color}`,
-      borderRadius: 2, padding: '14px 16px',
+      borderRadius: 2, padding: '16px 20px',
     }}>
-      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 16 }}>
+      {/* Sport label + description row */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
+        <span style={{
+          fontFamily: 'var(--font-display)', fontSize: 14, fontWeight: 800,
+          color: sport.color, letterSpacing: '0.08em',
+        }}>
+          {sport.label}
+        </span>
+        {liveFromWs && (
+          <span style={{
+            fontFamily: 'var(--font-display)', fontSize: 9, fontWeight: 700,
+            color: 'var(--accent)', border: '1px solid rgba(56,189,248,0.35)',
+            borderRadius: 2, padding: '1px 5px', letterSpacing: '0.1em',
+          }}>
+            LIVE
+          </span>
+        )}
+        <p style={{
+          fontFamily: 'var(--font-body)', fontSize: 11, color: 'var(--text-muted)',
+          lineHeight: '1.4', marginLeft: 8,
+          overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis',
+        }}>
+          {description}
+        </p>
+      </div>
 
-        {/* Score block */}
-        <div style={{ flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', width: 96 }}>
-          <div style={{ fontFamily: 'var(--font-display)', fontSize: 9, fontWeight: 800, color: 'var(--text-muted)', letterSpacing: '0.14em', marginBottom: 4 }}>
+      {/* Hero number + bars side by side */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 24 }}>
+        {/* Anton hero number */}
+        <div style={{ flexShrink: 0, minWidth: 90, textAlign: 'center' }}>
+          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--text-muted)', letterSpacing: '0.12em', marginBottom: 2 }}>
             HEAT INDEX
           </div>
           <div style={{
-            fontFamily: 'var(--font-display)', fontWeight: 900, fontSize: 56,
-            color, lineHeight: 1, letterSpacing: '-0.02em',
+            fontFamily: 'var(--font-hero)', fontSize: 67,
+            color, lineHeight: 1,
           }}>
             {score}
           </div>
           <div style={{
-            fontFamily: 'var(--font-display)', fontSize: 11, fontWeight: 800,
+            fontFamily: 'var(--font-display)', fontSize: 10, fontWeight: 700,
             letterSpacing: '0.12em', color, marginTop: 4,
           }}>
             {label}
           </div>
-          <ArcRing score={score} color={color} />
         </div>
 
-        {/* Right column */}
+        {/* Sub-bars */}
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 5 }}>
-            <span style={{
-              fontFamily: 'var(--font-display)', fontSize: 13, fontWeight: 800,
-              color: sport.color, letterSpacing: '0.08em',
-            }}>
-              {sport.label}
-            </span>
-            {liveFromWs && (
-              <span style={{
-                fontFamily: 'var(--font-display)', fontSize: 9, fontWeight: 800,
-                color: 'var(--accent)', border: '1px solid rgba(56,189,248,0.35)',
-                borderRadius: 2, padding: '0 5px', letterSpacing: '0.1em',
-              }}>
-                LIVE
-              </span>
-            )}
-          </div>
-          <p style={{
-            fontFamily: 'var(--font-sans)', fontSize: 12, color: 'var(--text-secondary)',
-            lineHeight: '1.5', marginBottom: 12,
-          }}>
-            {description}
-          </p>
           <HeatBreakdown score={score} />
         </div>
       </div>
     </div>
-  );
-}
-
-function ArcRing({ score, color }) {
-  const r = 26, cx = 32, cy = 32;
-  const circumference = Math.PI * r;
-  const pct = score / 100;
-
-  return (
-    <svg width={64} height={38} viewBox="0 0 64 38" style={{ marginTop: 6 }}>
-      <path d={`M 6 32 A ${r} ${r} 0 0 1 58 32`} fill="none" stroke="var(--border)" strokeWidth={3} strokeLinecap="round" />
-      <path
-        d={`M 6 32 A ${r} ${r} 0 0 1 58 32`}
-        fill="none" stroke={color} strokeWidth={3} strokeLinecap="round"
-        strokeDasharray={circumference}
-        strokeDashoffset={circumference * (1 - pct)}
-        style={{ transition: 'stroke-dashoffset 700ms cubic-bezier(0.22,1,0.36,1)' }}
-      />
-    </svg>
   );
 }
 
@@ -276,19 +259,19 @@ function TrackerCard({ card, index, sport }) {
       {/* Prices */}
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
         <span style={{
-          fontFamily: 'var(--font-display)', fontSize: 26, fontWeight: 900,
+          fontFamily: 'var(--font-display)', fontSize: 28, fontWeight: 800,
           color: 'var(--positive)', letterSpacing: '-0.01em',
         }}>
           {yes}
         </span>
-        <span style={{ fontFamily: 'var(--mono)', fontSize: 9, color: 'var(--text-muted)' }}>¢ YES</span>
+        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--text-muted)' }}>¢ YES</span>
         <span style={{
-          fontFamily: 'var(--font-display)', fontSize: 16, fontWeight: 700,
+          fontFamily: 'var(--font-display)', fontSize: 17, fontWeight: 600,
           color: 'var(--negative)', marginLeft: 'auto',
         }}>
           {no}
         </span>
-        <span style={{ fontFamily: 'var(--mono)', fontSize: 9, color: 'var(--text-muted)' }}>¢ NO</span>
+        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--text-muted)' }}>¢ NO</span>
       </div>
 
       <OddsBar yesPrice={yes} noPrice={no} compact />

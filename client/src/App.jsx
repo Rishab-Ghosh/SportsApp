@@ -137,8 +137,8 @@ function Topbar({ activeTab, onTabChange, onShare }) {
     }}>
       {/* Wordmark */}
       <span style={{
-        fontFamily: 'var(--font-display)', fontWeight: 900, fontSize: 19,
-        color: 'var(--brand)', letterSpacing: '0.06em', whiteSpace: 'nowrap',
+        fontFamily: 'var(--font-hero)', fontSize: 22,
+        color: 'var(--brand)', letterSpacing: '0.04em', whiteSpace: 'nowrap',
         marginRight: 20,
       }}>
         SPORTSPULSE
