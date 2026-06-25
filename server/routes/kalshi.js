@@ -1,5 +1,5 @@
 const express = require('express');
-const { getAllSportsMarkets } = require('../lib/kalshiSeries');
+const { getAllSportsMarkets } = require('../lib/kalshiDiscovery');
 const { kalshiGet } = require('../lib/kalshi');
 
 const router = express.Router();
