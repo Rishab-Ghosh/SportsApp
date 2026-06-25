@@ -16,9 +16,9 @@
   --border-hover:  #3a3a3a;
 
   /* Warm off-white typography */
-  --text-primary:   #ede9e4;
-  --text-secondary: #9c9390;
-  --text-muted:     #524e4b;
+  --text-primary:   #f1efec;
+  --text-secondary: #b8b0ab;
+  --text-muted:     #7a7370;
 
   /* ── Sports color palette ────────────────────────────────────── */
   --brand:    #c0392b;   /* ESPN-style deep red — logo, LIVE, section accents */
@@ -31,11 +31,11 @@
 
   /* ── Typography ─────────────────────────────────────────────── */
   /* Anton 400 — single biggest number per view only (hero price, heat index, wordmark) */
-  --font-hero:    'Anton', 'Impact', sans-serif;
-  /* Bricolage Grotesque — headlines, team names, card titles, labels */
-  --font-display: 'Bricolage Grotesque', system-ui, sans-serif;
-  /* Geist — body text, summaries, descriptions */
-  --font-body:    'Geist', 'DM Sans', system-ui, sans-serif;
+  --font-hero:    'Inter Tight', 'SF Pro Display', system-ui, sans-serif;
+  /* Product sans — headings, team names, card titles, labels */
+  --font-display: 'Inter', 'SF Pro Text', system-ui, sans-serif;
+  /* Body text */
+  --font-body:    'Inter', 'SF Pro Text', system-ui, sans-serif;
   /* Geist Mono — all odds, prices, volumes, scores, times */
   --font-mono:    'Geist Mono', 'JetBrains Mono', monospace;
   /* Aliases */
@@ -81,7 +81,7 @@ body {
   font-family: var(--font-sans);
   font-size: 1rem;
   line-height: 1.5;
-  letter-spacing: 0.01em;
+  letter-spacing: 0;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
@@ -188,5 +188,25 @@ body {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
+  }
+}
+
+
+button {
+  font: inherit;
+}
+
+button:focus:not(:focus-visible) {
+  outline: none;
+}
+
+button:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: -1px;
+}
+
+@media (max-width: 900px) {
+  .home-grid {
+    grid-template-columns: 1fr !important;
   }
 }

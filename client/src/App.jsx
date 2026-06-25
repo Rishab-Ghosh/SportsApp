@@ -3,6 +3,7 @@ import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { WebSocketProvider } from './context/WebSocketContext';
 import { useWebSocket } from './hooks/useWebSocket';
 import { useApi } from './hooks/useApi';
+import HomeDashboard from './panels/HomeDashboard';
 import NewsFeed from './panels/NewsFeed';
 import RightPanel from './panels/RightPanel';
 import OddsTab from './tabs/OddsTab';
@@ -22,6 +23,7 @@ const SPORTS = [
 ];
 
 const NAV_TABS = [
+  { id: 'Home',    label: 'HOME' },
   { id: 'News',    label: 'NEWS' },
   { id: 'Scores',  label: 'SCORES' },
   { id: 'Odds',    label: 'ODDS' },
@@ -50,7 +52,7 @@ function useViewportWidth() {
 
 
 export default function App() {
-  const [activeTab, setActiveTab]     = useState('News');
+  const [activeTab, setActiveTab]     = useState('Home');
   const [activeSport, setActiveSport] = useState('All');
   const [toastMsg, setToastMsg]       = useState('');
   const [slowBanner, setSlowBanner]   = useState(false);
@@ -97,12 +99,12 @@ export default function App() {
           {isMobile ? (
             <SportRail
               activeSport={activeSport}
-              onSportChange={id => { setActiveSport(id); setActiveTab('News'); }}
+              onSportChange={id => { setActiveSport(id); setActiveTab('Home'); }}
             />
           ) : (
             <LeftSidebar
               activeSport={activeSport}
-              onSportChange={id => { setActiveSport(id); setActiveTab('News'); }}
+              onSportChange={id => { setActiveSport(id); setActiveTab('Home'); }}
             />
           )}
 
@@ -119,6 +121,7 @@ export default function App() {
                 transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
                 style={{ minHeight: isCompact ? 'auto' : '100%' }}
               >
+                {activeTab === 'Home'    && <HomeDashboard activeSport={activeSport} onOpenTab={setActiveTab} />}
                 {activeTab === 'News'    && <NewsFeed activeSport={activeSport} onDataLoaded={dismissBanner} />}
                 {activeTab === 'Odds'    && <div style={{ padding: isMobile ? 10 : 16 }}><OddsTab /></div>}
                 {activeTab === 'Tracker' && <div style={{ padding: isMobile ? 10 : 16 }}><TrackerTab /></div>}

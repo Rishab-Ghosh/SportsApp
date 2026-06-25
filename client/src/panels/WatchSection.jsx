@@ -2,6 +2,7 @@
 import React, { useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useApi } from '../hooks/useApi';
+import { rankVideos } from '../utils/videoRanking';
 
 const SPORTS = ['NBA', 'NFL', 'MLB', 'Soccer', 'F1', 'Tennis'];
 
@@ -19,15 +20,16 @@ export default function WatchSection({ activeSport }) {
   const { data } = useApi(url, [activeSport]);
   const [open, setOpen] = useState(null);
 
+  const ranked = useMemo(() => rankVideos(data, activeSport, 12), [data, activeSport]);
   const highlights = useMemo(() => {
     const map = data?.highlights || {};
     if (activeSport && activeSport !== 'All') return map[activeSport] || [];
-    return SPORTS.flatMap(s => (map[s] || []).slice(0, 2));
+    return SPORTS.flatMap(s => (map[s] || []).slice(0, 1));
   }, [data, activeSport]);
 
-  const debate = data?.debate || [];
-  const news = data?.news || [];
-  if (!debate.length && !highlights.length && !news.length) return null;
+  const debate = (data?.debate || []).slice(0, 4);
+  const news = (data?.news || []).slice(0, 4);
+  if (!ranked.length && !debate.length && !highlights.length && !news.length) return null;
 
   return (
     <section style={{ marginBottom: 14, borderBottom: '1px solid var(--border)', paddingBottom: 12 }}>
@@ -36,12 +38,12 @@ export default function WatchSection({ activeSport }) {
           WATCH
         </span>
         <span style={{ fontFamily: 'var(--mono)', fontSize: 9, color: 'var(--text-muted)', letterSpacing: '0.08em' }}>
-          DEBATE · HIGHLIGHTS · BREAKING
+          RANKED BY SPORT · RECENCY · SIGNAL
         </span>
       </div>
-      <VideoRow title="FIRST TAKE / DEBATE" videos={debate.slice(0, 8)} large onOpen={setOpen} />
-      <VideoRow title="TOP HIGHLIGHTS" videos={highlights.slice(0, 12)} onOpen={setOpen} />
-      <VideoRow title="BREAKING NEWS" videos={news.slice(0, 8)} compact onOpen={setOpen} />
+      <VideoRow title="RECOMMENDED" videos={ranked.slice(0, 8)} large onOpen={setOpen} />
+      <VideoRow title="HIGHLIGHTS" videos={highlights.slice(0, 8)} onOpen={setOpen} />
+      <VideoRow title="NEWS / DEBATE" videos={[...news, ...debate].slice(0, 8)} compact onOpen={setOpen} />
 
       <AnimatePresence>
         {open && <VideoModal video={open} onClose={() => setOpen(null)} />}
