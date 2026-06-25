@@ -107,60 +107,84 @@ async function fetchSoccer() {
   return games;
 }
 
+// ESPN tennis has a groupings→competitions structure (different from team sports)
+function parseTennisFromESPN(data, tour) {
+  const matches = [];
+  for (const ev of data.events || []) {
+    const tournamentName = ev.name || '';
+    for (const grouping of ev.groupings || []) {
+      const groupName = grouping.grouping?.displayName || '';
+      // Skip doubles — only singles markets exist on Kalshi
+      if (/doubles/i.test(groupName)) continue;
+      for (const comp of grouping.competitions || []) {
+        const competitors = comp.competitors || [];
+        if (competitors.length < 2) continue;
+        const [c1, c2] = competitors;
+        const athleteName = (c) => c.athlete?.displayName || c.athlete?.shortName || null;
+        const p1 = athleteName(c1), p2 = athleteName(c2);
+        if (!p1 || !p2) continue;
+        const setScore = (c) => (c.linescores || []).map(ls => Math.round(ls.value ?? 0)).join(' ');
+        const state    = comp.status?.type?.state || 'pre';
+        const isLive   = state === 'in';
+        const isFinal  = state === 'post';
+        matches.push({
+          id:        comp.id || `${tournamentName}-${p1}-${p2}`,
+          sport:     'Tennis',
+          tour,
+          tournament: tournamentName,
+          group:     groupName,
+          player1:   p1, player2:   p2,
+          score1:    setScore(c1), score2: setScore(c2),
+          status:    comp.status?.type?.description || (isLive ? 'In Progress' : isFinal ? 'Final' : 'Scheduled'),
+          state,
+          startTime: comp.date || comp.startDate || ev.date || null,
+          winner:    c1.winner ? 1 : c2.winner ? 2 : null,
+          venue:     comp.venue?.fullName || null,
+          // backwards-compat fields for existing ScoreCard
+          home: p1, away: p2,
+          homeScore: setScore(c1), awayScore: setScore(c2),
+          isLive, isFinal, isUpcoming: !isLive && !isFinal,
+          home_team: p1, away_team: p2,
+          home_score: setScore(c1), away_score: setScore(c2),
+          home_logo: c1.athlete?.headshot?.href || null,
+          away_logo: c2.athlete?.headshot?.href || null,
+          is_live: isLive, is_final: isFinal,
+          start_time: comp.date || comp.startDate || ev.date || null,
+        });
+      }
+    }
+  }
+  return matches;
+}
+
 async function fetchTennis() {
-  // Try ESPN tennis scoreboard first (returns live Grand Slam matches)
-  const espnResults = await (async () => {
-    try {
-      const r = await axios.get(
-        'https://site.api.espn.com/apis/site/v2/sports/tennis/scoreboard',
-        { headers: ESPN_HEADERS, timeout: 8000 }
-      );
-      const games = parseESPNGames(r.data, 'tennis');
-      if (games.length > 0) return games;
-    } catch { /* fall through */ }
-    return null;
-  })();
+  try {
+    // ATP endpoint has all singles (ATP + WTA tournaments appear here)
+    const r = await axios.get(
+      'https://site.api.espn.com/apis/site/v2/sports/tennis/atp/scoreboard',
+      { headers: ESPN_HEADERS, timeout: 8000 }
+    );
+    const matches = parseTennisFromESPN(r.data, 'ATP');
+    if (matches.length > 0) {
+      console.log(`[tennis] ESPN ATP: ${matches.length} matches (live: ${matches.filter(m => m.isLive).length})`);
+      return matches;
+    }
+  } catch (e) {
+    console.warn('[tennis] ATP fetch failed:', e.message);
+  }
 
-  if (espnResults && espnResults.length > 0) return espnResults;
+  // Fallback: generic tennis scoreboard
+  try {
+    const r = await axios.get(
+      'https://site.api.espn.com/apis/site/v2/sports/tennis/scoreboard',
+      { headers: ESPN_HEADERS, timeout: 8000 }
+    );
+    const matches = parseTennisFromESPN(r.data, 'ATP');
+    if (matches.length > 0) return matches;
+  } catch { /* ignore */ }
 
-  // Fallback: TheSportsDB
-  const d = new Date();
-  const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-  const res = await axios.get('https://www.thesportsdb.com/api/v1/json/3/eventsday.php', {
-    params: { d: dateStr, s: 'Tennis' },
-    timeout: 8000,
-  });
-  const events = res.data?.events || [];
-  return events.slice(0, 12).map(e => {
-    const scoreHome = e.intHomeScore != null ? String(e.intHomeScore) : null;
-    const scoreAway = e.intAwayScore != null ? String(e.intAwayScore) : null;
-    const isFinal   = !!scoreHome && !!scoreAway;
-    return {
-      id:        String(e.intEventId),
-      sport:     'tennis',
-      home:      e.strHomeTeam || e.strHome || 'TBD',
-      away:      e.strAwayTeam || e.strAway || 'TBD',
-      homeScore: scoreHome,
-      awayScore: scoreAway,
-      status:    isFinal ? 'final' : 'upcoming',
-      clock:     null,
-      startTime: e.strTime ? `${e.dateEvent}T${e.strTime}:00` : `${e.dateEvent}T12:00:00`,
-      venue:     e.strVenue || null,
-      broadcast: null,
-      isLive:    false,
-      isFinal,
-      isUpcoming: !isFinal,
-      home_team:  e.strHomeTeam || e.strHome || 'TBD',
-      away_team:  e.strAwayTeam || e.strAway || 'TBD',
-      home_score: scoreHome || '0',
-      away_score: scoreAway || '0',
-      home_logo:  null,
-      away_logo:  null,
-      is_live:    false,
-      is_final:   isFinal,
-      start_time: e.strTime ? `${e.dateEvent}T${e.strTime}:00` : null,
-    };
-  });
+  console.warn('[tennis] All ESPN tennis endpoints returned 0 matches');
+  return [];
 }
 
 async function fetchF1() {

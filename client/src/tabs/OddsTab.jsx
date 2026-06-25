@@ -67,10 +67,25 @@ function usePriceFlash(yes) {
 // ── Main tab ─────────────────────────────────────────────────────────────────
 export default function OddsTab() {
   const { data, loading, error } = useApi('/api/kalshi/sports-markets');
-  const [filter, setFilter]    = useState('All');
-  const [sort, setSort]        = useState('Volume');
-  const [showAll, setShowAll]  = useState(false);
+  const [filter, setFilter]      = useState('All');
+  const [category, setCategory]  = useState(null);
+  const [sort, setSort]          = useState('Volume');
+  const [showAll, setShowAll]    = useState(false);
   const prefersReduced = useReducedMotion();
+
+  // Fetch categories when a specific sport is selected
+  const catUrl = filter !== 'All' ? `/api/kalshi/categories?sport=${filter}` : null;
+  const { data: catData } = useApi(catUrl);
+  const categories = catData?.categories || [];
+
+  // Reset category when sport changes
+  const prevFilter = useRef(filter);
+  useEffect(() => {
+    if (prevFilter.current !== filter) {
+      setCategory(null);
+      prevFilter.current = filter;
+    }
+  }, [filter]);
 
   const { data: rawData } = useApi(showAll ? '/api/kalshi/sports-markets?showAll=1' : null);
   const sourceData = showAll ? rawData : data;
@@ -78,6 +93,7 @@ export default function OddsTab() {
   const markets = useMemo(() => {
     let list = sourceData?.markets || [];
     if (filter !== 'All') list = list.filter(m => m.sport_tag === filter);
+    if (category) list = list.filter(m => m.category === category);
     if (sort === 'Volume') {
       list = [...list].sort((a, b) => (b.volume || 0) - (a.volume || 0));
     } else if (sort === 'Closing Soon') {
@@ -88,27 +104,28 @@ export default function OddsTab() {
       });
     }
     return list;
-  }, [sourceData, filter, sort]);
+  }, [sourceData, filter, category, sort]);
 
   const hero      = markets[0] ?? null;
   const secondary = markets.slice(1, 3);
   const listItems = markets.slice(3);
   const totalVol  = markets.reduce((s, m) => s + (m.volume || 0), 0);
+  const sc        = sportColor(filter);
 
   return (
     <div>
-      {/* ── Filter row ── */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
+      {/* ── Sport filter row ── */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, flexWrap: 'wrap', gap: 8 }}>
         <div style={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
           {FILTERS.map(f => {
             const active = filter === f;
-            const sc = SPORT_COLORS[f];
+            const fsc = SPORT_COLORS[f];
             return (
               <button key={f} onClick={() => setFilter(f)} style={{
                 padding: '4px 11px', borderRadius: 2, cursor: 'pointer',
-                background: active ? (sc ? `${sc}22` : 'rgba(56,189,248,0.12)') : 'transparent',
-                border: `1px solid ${active ? (sc || 'var(--accent)') : 'var(--border)'}`,
-                color: active ? (sc || 'var(--accent)') : 'var(--text-muted)',
+                background: active ? (fsc ? `${fsc}22` : 'rgba(56,189,248,0.12)') : 'transparent',
+                border: `1px solid ${active ? (fsc || 'var(--accent)') : 'var(--border)'}`,
+                color: active ? (fsc || 'var(--accent)') : 'var(--text-muted)',
                 fontFamily: 'var(--font-display)', fontSize: 11, fontWeight: 700,
                 letterSpacing: '0.08em', transition: 'all 0.1s',
               }}>
@@ -143,6 +160,45 @@ export default function OddsTab() {
         </div>
       </div>
 
+      {/* ── Category sub-tabs (only when a sport is selected and has categories) ── */}
+      {filter !== 'All' && categories.length > 1 && (
+        <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginBottom: 10, paddingBottom: 10, borderBottom: '1px solid var(--border)' }}>
+          <button
+            onClick={() => setCategory(null)}
+            style={{
+              padding: '3px 10px', borderRadius: 2, cursor: 'pointer',
+              background: category === null ? `${sc}18` : 'transparent',
+              border: `1px solid ${category === null ? sc : 'var(--border)'}`,
+              color: category === null ? sc : 'var(--text-muted)',
+              fontFamily: 'var(--font-mono)', fontSize: 9, letterSpacing: '0.08em',
+              transition: 'all 0.1s',
+            }}
+          >
+            ALL
+          </button>
+          {categories.map(cat => {
+            const active = category === cat.name;
+            return (
+              <button
+                key={cat.name}
+                onClick={() => setCategory(active ? null : cat.name)}
+                style={{
+                  padding: '3px 10px', borderRadius: 2, cursor: 'pointer',
+                  background: active ? `${sc}18` : 'transparent',
+                  border: `1px solid ${active ? sc : 'var(--border)'}`,
+                  color: active ? sc : 'var(--text-muted)',
+                  fontFamily: 'var(--font-mono)', fontSize: 9, letterSpacing: '0.06em',
+                  transition: 'all 0.1s', whiteSpace: 'nowrap',
+                }}
+              >
+                {cat.name.toUpperCase()}
+                <span style={{ marginLeft: 5, opacity: 0.5, fontSize: 8 }}>{cat.count}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+
       {/* ── Stats bar ── */}
       <div style={{
         display: 'flex', alignItems: 'center', gap: 18, marginBottom: 14,
@@ -157,8 +213,8 @@ export default function OddsTab() {
           VOL <span style={{ color: 'var(--positive)', fontWeight: 700 }}>{fmtVolume(totalVol)}</span>
         </span>
         {filter !== 'All' && (
-          <span style={{ color: sportColor(filter), fontFamily: 'var(--font-display)', fontSize: 11, fontWeight: 700, letterSpacing: '0.08em' }}>
-            {filter}
+          <span style={{ color: sc, fontFamily: 'var(--font-display)', fontSize: 11, fontWeight: 700, letterSpacing: '0.08em' }}>
+            {filter}{category ? ` · ${category}` : ''}
           </span>
         )}
       </div>
@@ -350,13 +406,13 @@ function HeroCard({ market }) {
         </div>
       </div>
 
-      {/* Hero chart — Phase 8.1 */}
+      {/* Hero chart */}
       <div
         id="hero-chart-slot"
         data-ticker={market.id}
         style={{ flex: 1, minHeight: 140, borderTop: '1px solid var(--border)' }}
       >
-        <HeroOddsChart ticker={market.id} sportColor={sc} />
+        <HeroOddsChart ticker={market.id} eventTicker={market.event_ticker} sportColor={sc} />
       </div>
     </div>
   );

@@ -40,6 +40,27 @@ function bucketSeries(series) {
   return null;
 }
 
+// ── Category derivation ───────────────────────────────────────────────────────
+
+// Classify a series into a market category from its title+tags.
+// Runs once per series; all markets in the series share the same category.
+function deriveCategory(series) {
+  const t      = `${series.title || ''} ${(series.tags || []).join(' ')}`.toLowerCase();
+  const ticker = (series.ticker || '').toUpperCase();
+  if (/champion|title|finals|cup winner|world series|super bowl/.test(t))  return 'Championship';
+  if (/\bmvp\b|most valuable|award|rookie of/.test(t))                      return 'Awards';
+  if (/trade|traded|next team|destination|sign with/.test(t))               return 'Trades & Moves';
+  if (/retire|retirement/.test(t))                                           return 'Retirement';
+  if (/draft|drafted|\bpick\b/.test(t))                                      return 'Draft';
+  // Spread/total/handicap markets are game props
+  if (/spread|total goals|over.*goals|handicap|moneyline/.test(t))          return 'Game Lines';
+  if (ticker.includes('SPREAD') || ticker.includes('TOTAL'))                return 'Game Lines';
+  if (/\bmatch\b|\bgame\b|\bvs\b|beat|defeat|wins?\b/.test(t))              return 'Game Lines';
+  if (/score|scorer|goals|assists|home runs|yards|\bprops\b|stat|points per/.test(t)) return 'Player Props';
+  if (/season wins?|regular season|over.under wins?|playoff/.test(t))       return 'Season';
+  return 'Other';
+}
+
 // ── API calls ─────────────────────────────────────────────────────────────────
 
 async function discoverSportsSeries() {
@@ -93,7 +114,7 @@ async function fetchEventsForSeries(seriesTicker) {
 
 const JUNK_PATTERNS = /\b(1st quarter|2nd quarter|3rd quarter|4th quarter|half total|1st half|2nd half|period|inning|drive)\b|\bwin the [12]H\b|\b[12]H by (over|under)\b/i;
 
-function normalizeMarket(m, event, sport) {
+function normalizeMarket(m, event, sport, category) {
   // Events endpoint returns *_dollars fields as strings in 0.00–1.00 range
   const bidD  = parseFloat(m.yes_bid_dollars);
   const askD  = parseFloat(m.yes_ask_dollars);
@@ -125,6 +146,7 @@ function normalizeMarket(m, event, sport) {
     event_ticker:  event.event_ticker || m.event_ticker,
     title:         m.title || event.title || m.ticker,
     sport_tag:     sport,
+    category:      category || 'Other',
     yes_price:     yesPrice,
     no_price:      yesPrice != null ? 100 - yesPrice : null,
     yes_prev:      prevPrice,
@@ -164,6 +186,10 @@ async function buildMarketMap() {
   const allSeries = await discoverSportsSeries();
   if (!allSeries.length) throw new Error('Series catalog returned empty');
 
+  // Build a lookup map from ticker → series object (for category derivation)
+  const seriesMetaMap = {};
+  for (const s of allSeries) seriesMetaMap[s.ticker] = s;
+
   // Bucket and pick top N per sport by cumulative trading volume
   const buckets = { NBA: [], NFL: [], MLB: [], Soccer: [], F1: [], Tennis: [] };
   for (const s of allSeries) {
@@ -194,8 +220,10 @@ async function buildMarketMap() {
     const now = Date.now();
     const markets = [];
     for (const event of allEvents) {
+      const seriesMeta = seriesMetaMap[event.series_ticker];
+      const category   = seriesMeta ? deriveCategory(seriesMeta) : 'Other';
       for (const m of event.markets || []) {
-        const norm = normalizeMarket(m, event, sport);
+        const norm = normalizeMarket(m, event, sport, category);
         if (
           norm.yes_price != null &&
           norm.yes_price > 0 && norm.yes_price < 100 &&
@@ -258,4 +286,4 @@ async function getAllSportsMarkets() {
   return _refreshPromise;
 }
 
-module.exports = { getAllSportsMarkets, buildMarketMap, bucketSeries };
+module.exports = { getAllSportsMarkets, buildMarketMap, bucketSeries, deriveCategory };
