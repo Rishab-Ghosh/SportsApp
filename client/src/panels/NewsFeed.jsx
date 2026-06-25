@@ -218,12 +218,14 @@ function StoryCard({ card }) {
         </div>
       </div>
 
-      <div style={{ height: 2, background: 'var(--border)', marginLeft: -14, marginRight: -14 }}>
+      <div style={{ height: 2, background: 'var(--border)', marginLeft: -14, marginRight: -14, overflow: 'hidden' }}>
         <div style={{
           height: '100%',
-          width: `${relevancePct}%`,
+          width: '100%',
           background: 'linear-gradient(90deg, #38bdf8, #818cf8)',
-          transition: 'width 0.6s',
+          transformOrigin: 'left',
+          transform: `scaleX(${relevancePct / 100})`,
+          transition: 'transform 0.6s cubic-bezier(0.22,1,0.36,1)',
         }} />
       </div>
     </div>

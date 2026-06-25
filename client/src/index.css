@@ -4,21 +4,40 @@
 
 :root {
   color-scheme: dark;
-  --bg-base: #080b12;
-  --bg-panel: #0d1117;
-  --bg-card: #0d1117;
-  --bg-card-hover: #131c28;
-  --border: #1e2d40;
-  --border-hover: #2d4a6b;
-  --text-primary: #e2e8f0;
-  --text-secondary: #94a3b8;
-  --text-muted: #64748b;
-  --accent: #38bdf8;
-  --green: #22c55e;
-  --red: #ef4444;
-  --orange: #f97316;
-  --yellow: #eab308;
-  --mono: 'JetBrains Mono', 'Fira Code', monospace;
+
+  /* Backgrounds — blue-tinted neutrals, not pure black/gray */
+  --bg-base:       #07090f;
+  --bg-panel:      #0b0f1a;
+  --bg-card:       #0e1420;
+  --bg-card-hover: #131d2e;
+
+  /* Borders — tinted */
+  --border:        #1a2840;
+  --border-hover:  #2a4266;
+
+  /* Text */
+  --text-primary:   #dde6f0;
+  --text-secondary: #8ea3bc;
+  --text-muted:     #506070;
+
+  /* Accent palette */
+  --accent:   #38bdf8;
+  --positive: #22c55e;
+  --negative: #f05454;
+  --orange:   #f97316;
+  --yellow:   #eab308;
+
+  /* Typography */
+  --font-sans: 'Space Grotesk', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
+
+  /* Easing — natural deceleration, no bounce */
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-in:  cubic-bezier(0.4, 0, 1, 1);
+
+  /* Legacy aliases used in App.jsx inline styles */
+  --mono: var(--font-mono);
+  --red:  var(--negative);
 }
 
 * {
@@ -35,47 +54,98 @@ html, body, #root {
 body {
   background-color: var(--bg-base);
   color: var(--text-primary);
-  font-family: 'Inter', system-ui, sans-serif;
+  font-family: var(--font-sans);
+  font-size: 1rem;
+  line-height: 1.5;
+  /* Light-on-dark compensation: slightly more open letter-spacing */
+  letter-spacing: 0.01em;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
-/* Thin scrollbar for inner scrollable areas */
+/* Thin scrollbar */
 ::-webkit-scrollbar { width: 4px; height: 4px; }
 ::-webkit-scrollbar-track { background: var(--bg-base); }
 ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--accent); }
-
 .scrollbar-hide::-webkit-scrollbar { display: none; }
 .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
 
 .font-mono {
-  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-family: var(--font-mono);
 }
 
-@keyframes pulse-glow {
-  0%, 100% { box-shadow: 0 0 4px rgba(56, 189, 248, 0.3); }
-  50%       { box-shadow: 0 0 12px rgba(56, 189, 248, 0.7); }
-}
-
-.live-indicator {
-  animation: pulse-glow 2s ease-in-out infinite;
-}
-
+/* ── Skeleton shimmer ─────────────────────────────────────── */
 @keyframes skeleton-shimmer {
   0%   { background-position: -200% 0; }
   100% { background-position: 200% 0; }
 }
 
 .skeleton {
-  background: linear-gradient(90deg, #0d1117 25%, #1e2d40 50%, #0d1117 75%);
+  background: linear-gradient(90deg, var(--bg-card) 25%, var(--border) 50%, var(--bg-card) 75%);
   background-size: 200% 100%;
   animation: skeleton-shimmer 1.5s infinite;
 }
 
-@keyframes fade-in {
+/* ── Card entrance — stagger via --card-i CSS custom prop ─── */
+@keyframes card-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.card-stagger {
+  animation: card-in 280ms var(--ease-out) both;
+  animation-delay: calc(var(--card-i, 0) * 40ms);
+}
+
+/* ── Tab content cross-fade ───────────────────────────────── */
+@keyframes tab-fade-in {
   from { opacity: 0; transform: translateY(4px); }
   to   { opacity: 1; transform: translateY(0); }
 }
 
+.tab-content {
+  animation: tab-fade-in 220ms var(--ease-out) both;
+}
+
+/* ── Price flash ──────────────────────────────────────────── */
+@keyframes flash-up {
+  0%   { background-color: rgba(34, 197, 94, 0.25); }
+  100% { background-color: transparent; }
+}
+@keyframes flash-down {
+  0%   { background-color: rgba(240, 84, 84, 0.25); }
+  100% { background-color: transparent; }
+}
+
+.price-flash-up   { animation: flash-up   600ms ease-out; }
+.price-flash-down { animation: flash-down 600ms ease-out; }
+
+/* ── Live glow pulse ──────────────────────────────────────── */
+@keyframes glow-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(56, 189, 248, 0.15); }
+  50%       { box-shadow: 0 0 0 4px rgba(56, 189, 248, 0.08); }
+}
+
+.live-indicator {
+  animation: glow-pulse 2.5s ease-in-out infinite;
+}
+
+/* ── Fade in (generic) ────────────────────────────────────── */
+@keyframes fade-in {
+  from { opacity: 0; transform: translateY(3px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
 .animate-fade-in {
-  animation: fade-in 0.2s ease-out;
+  animation: fade-in 200ms var(--ease-out);
+}
+
+/* ── Reduced motion: kill all animations ─────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }

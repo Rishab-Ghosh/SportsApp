@@ -52,7 +52,7 @@ export default function ScoresTab() {
   const markets = wsData?.markets || marketsHttp?.markets || [];
 
   return (
-    <div>
+    <div className="tab-content">
       <div className="flex gap-2 mb-6 overflow-x-auto pb-1 scrollbar-hide">
         {SPORTS.map(s => (
           <button
