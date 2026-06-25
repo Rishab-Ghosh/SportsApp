@@ -92,6 +92,29 @@ async function scrapeRSS(url, sport) {
   })).filter(a => a.title);
 }
 
+// Follow Google News redirect to get the real publisher URL.
+// Returns null if it can't be resolved (caller drops the article or falls back).
+async function unwrapGoogleUrl(googleUrl) {
+  try {
+    // Use native fetch (Node 18+) — axios exposes responseUrl unreliably on some versions
+    const ctrl = new AbortController();
+    const timeout = setTimeout(() => ctrl.abort(), 4000);
+    try {
+      const r = await fetch(googleUrl, {
+        method: 'GET',
+        redirect: 'follow',
+        headers: { 'User-Agent': 'Mozilla/5.0 (compatible; SportsPulse/1.0)' },
+        signal: ctrl.signal,
+      });
+      clearTimeout(timeout);
+      if (r.url && !r.url.includes('news.google.com')) return r.url;
+    } finally {
+      clearTimeout(timeout);
+    }
+  } catch {}
+  return null;
+}
+
 async function scrapeGoogleNews() {
   const results = await Promise.allSettled(
     GOOGLE_QUERIES.map(({ q, sport }) =>
@@ -101,15 +124,26 @@ async function scrapeGoogleNews() {
         const parsed = await parseStringPromise(res.data, { explicitArray: false });
         const items = parsed?.rss?.channel?.item || [];
         const arr = Array.isArray(items) ? items : [items];
-        return arr.slice(0, 8).map(item => toArticle({
-          title: item.title,
-          url: item.link,
-          source: item.source?._ || 'Google News',
-          publishedAt: item.pubDate ? new Date(item.pubDate).toISOString() : new Date().toISOString(),
-          sport_tag: sport,
-          type: 'rss',
-          description: item.description || '',
-        })).filter(a => a.title);
+        const raw = arr.slice(0, 8)
+          .map(item => ({
+            title: (item.title || '').trim(),
+            googleUrl: item.link,
+            source: item.source?._ || 'Google News',
+            publishedAt: item.pubDate ? new Date(item.pubDate).toISOString() : new Date().toISOString(),
+            sport_tag: sport,
+            description: (item.description || '').replace(/<[^>]+>/g, '').trim(),
+          }))
+          .filter(a => a.title && a.googleUrl);
+
+        // Unwrap redirect URLs in parallel (best-effort; failures get dropped)
+        const unwrapped = await Promise.all(
+          raw.map(async a => {
+            const realUrl = await unwrapGoogleUrl(a.googleUrl);
+            if (!realUrl) return null; // drop unresolvable Google links
+            return toArticle({ ...a, url: realUrl, type: 'rss' });
+          })
+        );
+        return unwrapped.filter(Boolean);
       })
     )
   );
@@ -213,12 +247,19 @@ function clusterAndScore(articles) {
     rel += sc >= 4 ? 25 : sc === 3 ? 18 : sc === 2 ? 10 : 5;
     rel += redditUp > 1000 ? 20 : redditUp > 500 ? 15 : redditUp > 100 ? 10 : redditUp > 0 ? 5 : 0;
 
+    // When a cluster has real publisher sources, hide Google ones from the display list
+    // (Google redirect URLs confuse users and break link sharing)
+    const allSourceItems = group.map(a => ({ name: a.source, url: a.url }));
+    const realSources = allSourceItems.filter(s => !s.url.includes('news.google.com') && !s.url.includes('google.com/rss'));
+    const sourcesForDisplay = realSources.length > 0 ? realSources : allSourceItems;
+    const deduped = [...new Map(sourcesForDisplay.map(s => [s.name, s])).values()];
+
     return {
       id: hash(lead.title),
       headline: lead.title,
       summary: lead.description || group.slice(0, 2).map(a => a.title).join(' · '),
       sport_tag: lead.sport_tag,
-      sources: [...new Map(group.map(a => [a.source, { name: a.source, url: a.url }])).values()],
+      sources: deduped,
       source_count: sc,
       reddit_upvotes: redditUp,
       relevance_score: Math.min(100, Math.round(rel)),

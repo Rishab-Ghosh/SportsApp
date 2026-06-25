@@ -1,34 +1,42 @@
-import React, { useState, useEffect } from 'react';
-import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
+import React, { useState, useEffect, useMemo } from 'react';
+import {
+  AreaChart, Area, XAxis, YAxis, Tooltip,
+  ResponsiveContainer, CartesianGrid,
+} from 'recharts';
 
 const BASE = import.meta.env.VITE_API_BASE_URL || '';
 
-function fmtTime(ts) {
-  if (!ts) return '';
-  const d = new Date(typeof ts === 'number' ? ts * 1000 : ts);
+function fmtLabel(t) {
+  if (!t) return '';
+  const d = new Date(t);
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+
+function fmtTooltipDate(t) {
+  if (!t) return '';
+  return new Date(t).toLocaleString('en-US', {
+    month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit',
+  });
 }
 
 function CustomTooltip({ active, payload, label }) {
   if (!active || !payload?.length) return null;
-  const val = payload[0]?.value;
   return (
     <div style={{
-      background: 'var(--bg-card)',
-      border: '1px solid var(--border)',
-      borderRadius: 4,
-      padding: '6px 10px',
-      fontFamily: 'var(--font-mono)',
-      fontSize: 11,
+      background: 'var(--bg-card)', border: '1px solid var(--border)',
+      borderRadius: 4, padding: '6px 10px',
+      fontFamily: 'var(--font-mono)', fontSize: 11,
     }}>
-      <div style={{ color: 'var(--text-muted)' }}>{fmtTime(label)}</div>
-      <div style={{ color: 'var(--accent)', fontWeight: 600 }}>{val}¢</div>
+      <div style={{ color: 'var(--text-muted)', marginBottom: 2 }}>{fmtTooltipDate(label)}</div>
+      <div style={{ color: 'var(--accent)', fontWeight: 700 }}>
+        {payload[0]?.value}¢
+      </div>
     </div>
   );
 }
 
 export default function PriceChart({ marketId, height = 80, showAxes = false }) {
-  const [data, setData] = useState(null);
+  const [points, setPoints] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -37,21 +45,35 @@ export default function PriceChart({ marketId, height = 80, showAxes = false }) 
     setLoading(true);
     fetch(`${BASE}/api/kalshi/market/${encodeURIComponent(marketId)}/history`)
       .then(r => r.json())
-      .then(d => { if (!cancelled) { setData(d.history || []); setLoading(false); } })
-      .catch(() => { if (!cancelled) { setData([]); setLoading(false); } });
+      .then(d => {
+        if (!cancelled) {
+          // Backend returns { points: [{t, price}] }
+          setPoints(d.points || d.history?.map(h => ({ t: (h.ts || 0) * 1000, price: h.yes_price })) || []);
+          setLoading(false);
+        }
+      })
+      .catch(() => { if (!cancelled) { setPoints([]); setLoading(false); } });
     return () => { cancelled = true; };
   }, [marketId]);
+
+  // Direction: up = green, down = red (chart gradient color)
+  const isUp = useMemo(() => {
+    if (!points || points.length < 2) return true;
+    return points[points.length - 1].price >= points[0].price;
+  }, [points]);
+
+  const strokeColor = isUp ? 'var(--positive)' : 'var(--negative)';
+  const gradId = `grad-${marketId}`;
 
   if (loading) {
     return <div className="skeleton rounded" style={{ height }} />;
   }
 
-  if (!data || data.length < 2) {
-    // Show a placeholder flat line
+  if (!points || points.length < 2) {
     return (
       <div style={{ height, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         <span style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-muted)' }}>
-          NO HISTORY
+          NO PRICE HISTORY YET
         </span>
       </div>
     );
@@ -59,43 +81,47 @@ export default function PriceChart({ marketId, height = 80, showAxes = false }) 
 
   return (
     <ResponsiveContainer width="100%" height={height}>
-      <AreaChart data={data} margin={{ top: 4, right: 0, bottom: 0, left: 0 }}>
+      <AreaChart data={points} margin={{ top: 4, right: 0, bottom: 0, left: 0 }}>
         <defs>
-          <linearGradient id={`grad-${marketId}`} x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="var(--accent)" stopOpacity={0.3} />
-            <stop offset="100%" stopColor="var(--accent)" stopOpacity={0.02} />
+          <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor={strokeColor} stopOpacity={0.25} />
+            <stop offset="100%" stopColor={strokeColor} stopOpacity={0.02} />
           </linearGradient>
         </defs>
+
         {showAxes && (
           <>
-            <CartesianGrid vertical={false} stroke="var(--border)" strokeDasharray="4 4" />
+            <CartesianGrid vertical={false} stroke="var(--border)" strokeDasharray="3 3" />
             <XAxis
-              dataKey="ts"
-              tickFormatter={fmtTime}
-              tick={{ fontSize: 10, fontFamily: 'var(--font-mono)', fill: 'var(--text-muted)' }}
+              dataKey="t"
+              tickFormatter={fmtLabel}
+              tick={{ fontSize: 9, fontFamily: 'var(--font-mono)', fill: 'var(--text-muted)' }}
               axisLine={false}
               tickLine={false}
+              minTickGap={40}
             />
             <YAxis
-              domain={[0, 100]}
-              tick={{ fontSize: 10, fontFamily: 'var(--font-mono)', fill: 'var(--text-muted)' }}
+              domain={['auto', 'auto']}
+              tick={{ fontSize: 9, fontFamily: 'var(--font-mono)', fill: 'var(--text-muted)' }}
               tickFormatter={v => `${v}¢`}
               axisLine={false}
               tickLine={false}
-              width={32}
+              width={30}
             />
           </>
         )}
+
         <Tooltip content={<CustomTooltip />} />
+
         <Area
           type="monotone"
-          dataKey="yes_price"
-          stroke="var(--accent)"
+          dataKey="price"
+          stroke={strokeColor}
           strokeWidth={1.5}
-          fill={`url(#grad-${marketId})`}
+          fill={`url(#${gradId})`}
           dot={false}
-          activeDot={{ r: 3, fill: 'var(--accent)', stroke: 'var(--bg-card)', strokeWidth: 2 }}
-          animationDuration={600}
+          activeDot={{ r: 3, fill: strokeColor, stroke: 'var(--bg-card)', strokeWidth: 2 }}
+          animationDuration={700}
           animationEasing="ease-out"
         />
       </AreaChart>

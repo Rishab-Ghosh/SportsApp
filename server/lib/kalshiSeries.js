@@ -114,6 +114,32 @@ function normalize(m, sport) {
   };
 }
 
+// ── Junk filtering & market scoring ──────────────────────────────────────────
+
+// Match intraday micro-market title patterns — single-game props that resolve same day
+const JUNK_PATTERNS = /\b(1st quarter|2nd quarter|3rd quarter|4th quarter|half total|1st half|2nd half|period|inning|drive)\b|\bwin the [12]H\b|\b[12]H by (over|under)\b/i;
+
+function isJunkMarket(m) {
+  if (m.yes_price != null && (m.yes_price <= 3 || m.yes_price >= 97)) return true;
+  if ((m.volume || 0) < 1000) return true;
+  if (JUNK_PATTERNS.test(m.title)) return true;
+  return false;
+}
+
+function scoreMarket(m) {
+  let s = 0;
+  s += Math.log10((m.volume || 0) + 1) * 10;
+  if (m.close_time) {
+    const days = (new Date(m.close_time) - Date.now()) / 8.64e7;
+    if (days > 2 && days < 120) s += 20;
+  }
+  const dist = Math.abs(50 - (m.yes_price ?? 50));
+  s += (50 - dist) * 0.5; // reward markets closer to 50/50
+  return s;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 let _cache = null;
 let _cacheTs = 0;
 let _refreshPromise = null;
@@ -122,12 +148,12 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 async function _fetchAll() {
   const result = {};
+  const raw = {};
+
   let sportIdx = 0;
   for (const [sport, tickers] of Object.entries(SPORT_SERIES)) {
-    // Pause between sports to stay well under Kalshi rate limits
     if (sportIdx++ > 0) await sleep(400);
 
-    // Fetch 2 tickers concurrently, 200ms between batches
     const all = [];
     for (let i = 0; i < tickers.length; i += 2) {
       const batch = tickers.slice(i, i + 2);
@@ -140,28 +166,31 @@ async function _fetchAll() {
     const markets = all
       .map(m => normalize(m, sport))
       .filter(m =>
-        // Must have a real price
         m.yes_price != null &&
-        // Not fully settled (prices stuck at 0 or 100 are usually resolved)
         m.yes_price > 0 && m.yes_price < 100 &&
-        // Must have a readable title
         m.title && m.title !== m.id &&
-        // Must not be expired
         (!m.close_time || new Date(m.close_time).getTime() > now)
       );
 
-    // Dedupe by id
     const seen = new Set();
-    result[sport] = markets
-      .filter(m => !seen.has(m.id) && seen.add(m.id))
-      .sort((a, b) => b.volume - a.volume);
+    const deduped = markets.filter(m => !seen.has(m.id) && seen.add(m.id));
+
+    // Raw list: all valid markets sorted by volume (used for "show all" toggle)
+    raw[sport] = [...deduped].sort((a, b) => b.volume - a.volume);
+
+    // Clean list: junk removed, sorted by composite score (contested + high-volume + not-about-to-expire)
+    result[sport] = deduped
+      .filter(m => !isJunkMarket(m))
+      .sort((a, b) => scoreMarket(b) - scoreMarket(a));
   }
+
+  result._raw = raw; // prefixed with _ so route flattening can skip it
   return result;
 }
 
 function _isIncomplete(data) {
-  // Consider a fetch incomplete if more than 2 sports have zero markets
-  const empties = Object.values(data).filter(arr => arr.length === 0).length;
+  const sports = Object.keys(data).filter(k => !k.startsWith('_'));
+  const empties = sports.filter(k => data[k].length === 0).length;
   return empties > 2;
 }
 

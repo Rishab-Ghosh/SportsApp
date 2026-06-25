@@ -198,10 +198,12 @@ router.get('/all', async (req, res) => {
       clusters = await buildStoryCards(articles, []);
     }
     const enriched = await enrichClusters(clusters);
-    res.json({ cards: enriched.slice(0, limit), total: enriched.length });
+    const page = enriched.slice(0, limit);
+    // `stories` alias for API consumers; `cards` kept for frontend compatibility
+    res.json({ cards: page, stories: page, total: enriched.length });
   } catch (err) {
     console.error('News all error:', err.message);
-    res.json({ cards: [], total: 0, error: err.message });
+    res.json({ cards: [], stories: [], total: 0, error: err.message });
   }
 });
 

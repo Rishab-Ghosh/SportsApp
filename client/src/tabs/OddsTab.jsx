@@ -1,31 +1,27 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
+import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { useApi } from '../hooks/useApi';
 import SportBadge from '../components/SportBadge';
-import OddsBar from '../components/OddsBar';
 import PriceChart from '../components/PriceChart';
 import { SkeletonCard } from '../components/Skeleton';
 
 const FILTERS = ['All', 'NBA', 'NFL', 'MLB', 'Soccer', 'F1', 'Tennis'];
-const SORTS   = ['Volume', 'Closing Soon', 'Movement'];
+const SORTS   = ['Volume', 'Score', 'Closing Soon'];
 
-// Clean market titles — defensive guard against any raw parlay strings that slip through.
-// Format: "yes A,yes B,yes C" → "3 outcome parlay"
+// Defensive guard: "yes A,yes B,yes C" → clean title
 function cleanTitle(title, event_ticker) {
   if (!title) return event_ticker || 'Unnamed market';
-  // Multi-leg parlay: "yes X,yes Y" or "no X,yes Y" comma-separated list
   if (/^(yes|no)\s+\S+,(yes|no)/i.test(title.trim())) {
     const legs = title.split(',').length;
-    const eventBase = event_ticker
-      ? event_ticker.replace(/^[A-Z0-9]+-/, '').replace(/-/g, ' ').trim()
-      : null;
-    return eventBase ? `${eventBase} — ${legs} legs` : `${legs}-leg market`;
+    const base = event_ticker?.replace(/^[A-Z0-9]+-/, '').replace(/-/g, ' ').trim();
+    return base ? `${base} — ${legs} legs` : `${legs}-leg market`;
   }
   return title;
 }
 
 function fmtVolume(v) {
   if (!v) return '—';
-  if (v >= 1000000) return `$${(v / 1000000).toFixed(1)}M`;
+  if (v >= 1_000_000) return `$${(v / 1_000_000).toFixed(1)}M`;
   if (v >= 1000) return `$${(v / 1000).toFixed(0)}K`;
   return `$${Math.round(v)}`;
 }
@@ -44,12 +40,20 @@ function timeLeft(ts) {
 
 export default function OddsTab() {
   const { data, loading, error } = useApi('/api/kalshi/sports-markets');
-  const [filter, setFilter] = useState('All');
-  const [sort, setSort]     = useState('Volume');
-  const [expanded, setExpanded] = useState(null); // expanded card id for detail view
+  const [filter, setFilter]     = useState('All');
+  const [sort, setSort]         = useState('Volume');
+  const [showAll, setShowAll]   = useState(false);
+  const [expanded, setExpanded] = useState(null);
+  const prefersReduced = useReducedMotion();
+
+  // Re-fetch with showAll toggle
+  const { data: rawData } = useApi(
+    showAll ? '/api/kalshi/sports-markets?showAll=1' : null
+  );
+  const sourceData = showAll ? rawData : data;
 
   const markets = useMemo(() => {
-    let list = data?.markets || [];
+    let list = sourceData?.markets || [];
     if (filter !== 'All') list = list.filter(m => m.sport_tag === filter);
     if (sort === 'Volume') {
       list = [...list].sort((a, b) => (b.volume || 0) - (a.volume || 0));
@@ -59,21 +63,25 @@ export default function OddsTab() {
         const tb = b.close_time ? new Date(b.close_time).getTime() : Infinity;
         return ta - tb;
       });
-    } else if (sort === 'Movement') {
-      list = [...list].sort((a, b) => {
-        const ma = Math.abs((a.yes_price || 50) - 50);
-        const mb = Math.abs((b.yes_price || 50) - 50);
-        return mb - ma;
-      });
     }
+    // Score sort uses server ordering (already scored by default)
     return list;
-  }, [data, filter, sort]);
+  }, [sourceData, filter, sort]);
 
   const totalVol = markets.reduce((s, m) => s + (m.volume || 0), 0);
 
+  const containerVariants = {
+    hidden: {},
+    show: { transition: { staggerChildren: prefersReduced ? 0 : 0.03 } },
+  };
+  const cardVariants = {
+    hidden: { opacity: 0, y: prefersReduced ? 0 : 10 },
+    show:   { opacity: 1, y: 0, transition: { duration: 0.4, ease: [0.22, 1, 0.36, 1] } },
+  };
+
   return (
-    <div className="tab-content">
-      {/* Controls */}
+    <div>
+      {/* Filter + sort row */}
       <div className="flex items-center justify-between mb-5 flex-wrap gap-3">
         <div className="flex gap-1.5 flex-wrap">
           {FILTERS.map(f => (
@@ -91,7 +99,7 @@ export default function OddsTab() {
           ))}
         </div>
         <div className="flex gap-1.5 items-center">
-          <span className="text-[10px] text-muted font-mono tracking-widest">SORT:</span>
+          <span className="text-[10px] text-muted font-mono tracking-widest">SORT</span>
           {SORTS.map(s => (
             <button
               key={s}
@@ -108,11 +116,21 @@ export default function OddsTab() {
         </div>
       </div>
 
-      {/* Stats row */}
-      <div className="flex gap-6 mb-5 px-4 py-3 bg-[var(--bg-card)] border border-[var(--border)] rounded-md text-xs font-mono">
+      {/* Stats + showAll toggle */}
+      <div className="flex items-center gap-6 mb-5 px-4 py-3 bg-[var(--bg-card)] border border-[var(--border)] rounded-md text-xs font-mono">
         <div><span className="text-muted">MARKETS </span><span className="text-accent font-semibold">{markets.length}</span></div>
-        <div><span className="text-muted">TOTAL VOL </span><span className="text-positive font-semibold">{fmtVolume(totalVol)}</span></div>
+        <div><span className="text-muted">VOLUME </span><span className="text-positive font-semibold">{fmtVolume(totalVol)}</span></div>
         <div><span className="text-muted">FILTER </span><span className="text-label font-semibold">{filter}</span></div>
+        <button
+          onClick={() => setShowAll(v => !v)}
+          className={`ml-auto text-[10px] font-mono border rounded px-2 py-0.5 transition-colors ${
+            showAll
+              ? 'border-orange/50 text-orange bg-orange/10'
+              : 'border-border text-muted hover:text-label'
+          }`}
+        >
+          {showAll ? 'FILTERED OFF' : 'SHOW ALL'}
+        </button>
       </div>
 
       {error && (
@@ -123,108 +141,135 @@ export default function OddsTab() {
 
       {loading ? (
         <div className="grid grid-cols-2 gap-4">
-          {Array.from({ length: 6 }).map((_, i) => <SkeletonCard key={i} lines={4} />)}
+          {Array.from({ length: 6 }).map((_, i) => <SkeletonCard key={i} lines={5} />)}
         </div>
       ) : markets.length === 0 ? (
         <div className="text-center py-16 text-muted font-mono text-sm">
           No markets for <span className="text-label">{filter}</span>
         </div>
       ) : (
-        <div className="grid grid-cols-2 gap-4">
-          {markets.map((m, i) => (
-            <MarketCard
-              key={m.id}
-              market={m}
-              index={i}
-              isExpanded={expanded === m.id}
-              onToggle={() => setExpanded(expanded === m.id ? null : m.id)}
-            />
+        <motion.div
+          className="grid grid-cols-2 gap-4"
+          variants={containerVariants}
+          initial="hidden"
+          animate="show"
+          key={`${filter}-${sort}-${showAll}`}
+        >
+          {markets.map((m) => (
+            <motion.div key={m.id} variants={cardVariants}>
+              <MarketCard
+                market={m}
+                isExpanded={expanded === m.id}
+                onToggle={() => setExpanded(expanded === m.id ? null : m.id)}
+              />
+            </motion.div>
           ))}
-        </div>
+        </motion.div>
       )}
     </div>
   );
 }
 
-function MarketCard({ market, index, isExpanded, onToggle }) {
+function MarketCard({ market, isExpanded, onToggle }) {
   const { label: tl, urgent } = timeLeft(market.close_time);
   const yes = market.yes_price ?? 50;
-  const isHot = (market.volume || 0) > 50000 || Math.abs(yes - 50) > 25;
+  const no  = 100 - yes;
   const title = cleanTitle(market.title, market.event_ticker);
-  const prevYes = useRef(yes);
-  const [flashClass, setFlashClass] = useState('');
 
-  // Flash price on change
+  // Price flash on live update
+  const prevRef = useRef(yes);
+  const [flash, setFlash] = useState('');
   useEffect(() => {
-    if (prevYes.current !== yes) {
-      const direction = yes > prevYes.current ? 'price-flash-up' : 'price-flash-down';
-      setFlashClass(direction);
-      prevYes.current = yes;
-      const id = setTimeout(() => setFlashClass(''), 700);
+    if (prevRef.current !== yes) {
+      setFlash(yes > prevRef.current ? 'price-flash-up' : 'price-flash-down');
+      prevRef.current = yes;
+      const id = setTimeout(() => setFlash(''), 700);
       return () => clearTimeout(id);
     }
   }, [yes]);
 
   return (
     <div
-      className={`card-stagger bg-[var(--bg-card)] border rounded-lg transition-colors cursor-pointer ${
-        isHot ? 'border-accent/25 hover:border-accent/50' : 'border-[var(--border)] hover:border-[var(--border-hover)]'
-      }`}
-      style={{ '--card-i': Math.min(index, 12) }}
+      className={`group bg-[var(--bg-card)] border rounded-lg cursor-pointer overflow-hidden
+        transition-all duration-150 ease-out
+        ${isExpanded ? 'border-accent/50' : 'border-[var(--border)] hover:border-[var(--border-hover)]'}
+      `}
+      style={{ transform: 'translateY(0)' }}
+      onMouseEnter={e => { if (!isExpanded) e.currentTarget.style.transform = 'translateY(-2px)'; }}
+      onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)'; }}
       onClick={onToggle}
     >
-      {/* Card body */}
+      {/* Thin accent top-line for hot markets */}
+      {(market.volume || 0) > 50000 && (
+        <div className="h-[2px] bg-accent w-full" />
+      )}
+
       <div className="p-4">
-        {/* Header */}
-        <div className="flex items-start gap-2 mb-3">
-          <div className="flex-1 min-w-0">
-            {isHot && (
-              <div className="text-[9px] font-mono font-bold text-accent tracking-widest mb-1 uppercase">HOT</div>
-            )}
-            <p className="text-[13px] text-[var(--text-primary)] leading-snug font-medium line-clamp-2">
-              {title}
-            </p>
-          </div>
+        {/* Title + badge */}
+        <div className="flex items-start gap-2 mb-4">
+          <p className="text-[13px] text-[var(--text-primary)] leading-snug font-medium line-clamp-2 flex-1 min-w-0">
+            {title}
+          </p>
           <SportBadge sport={market.sport_tag} size="xs" />
         </div>
 
-        {/* Price bar */}
-        <OddsBar yesPrice={yes} noPrice={market.no_price} />
+        {/* YES price as hero */}
+        <div className="flex items-end gap-3 mb-3">
+          <div className={`${flash} rounded`}>
+            <span className="font-mono font-bold tabular-nums leading-none"
+              style={{ fontSize: 32, color: 'var(--positive)' }}>
+              {yes}
+            </span>
+            <span className="text-muted font-mono text-xs ml-0.5">¢</span>
+          </div>
+          <div className="mb-0.5">
+            <div className="text-[9px] font-mono text-muted tracking-widest">YES</div>
+          </div>
+          <div className="ml-auto text-right mb-0.5">
+            <span className="font-mono font-semibold tabular-nums text-[var(--negative)] text-lg">{no}</span>
+            <span className="text-muted font-mono text-[10px] ml-0.5">¢ NO</span>
+          </div>
+        </div>
 
-        {/* Stats row */}
-        <div className="grid grid-cols-3 gap-2 mt-3 pt-3 border-t border-[var(--border)]">
-          <Stat label="VOL" value={fmtVolume(market.volume)} />
-          <Stat label="CLOSES" value={tl} urgent={urgent} />
-          <Stat
-            label="YES"
-            value={`${yes}¢`}
-            color="text-positive"
-            className={flashClass}
+        {/* Single probability bar: YES fills in accent, remainder muted */}
+        <div className="h-1.5 bg-[var(--border)] rounded-full overflow-hidden mb-3">
+          <div
+            className="h-full bg-accent rounded-full origin-left"
+            style={{
+              transform: `scaleX(${yes / 100})`,
+              transition: 'transform 0.4s ease-out',
+            }}
           />
         </div>
-      </div>
 
-      {/* Expanded detail: real price history chart */}
-      {isExpanded && (
-        <div
-          className="border-t border-[var(--border)] px-4 pb-4 pt-3"
-          onClick={e => e.stopPropagation()}
-        >
-          <div className="text-[9px] font-mono text-muted tracking-widest mb-2">PRICE HISTORY (7D)</div>
-          <PriceChart marketId={market.id} height={100} showAxes />
+        {/* Metadata footer */}
+        <div className="flex items-center gap-3 text-[10px] font-mono">
+          <span className="text-muted">VOL <span className="text-label">{fmtVolume(market.volume)}</span></span>
+          <span className={urgent ? 'text-negative font-semibold' : 'text-muted'}>
+            ⏱ {tl}
+          </span>
         </div>
-      )}
-    </div>
-  );
-}
-
-function Stat({ label, value, urgent, color, className }) {
-  return (
-    <div className={`text-center rounded px-1 ${className || ''}`}>
-      <div className="text-[9px] font-mono text-muted tracking-widest uppercase">{label}</div>
-      <div className={`text-xs font-mono font-bold mt-0.5 tabular-nums ${urgent ? 'text-negative' : color || 'text-[var(--text-primary)]'}`}>
-        {value}
       </div>
+
+      {/* Expanded detail: price history */}
+      <AnimatePresence>
+        {isExpanded && (
+          <motion.div
+            key="chart"
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
+            className="overflow-hidden"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="border-t border-[var(--border)] px-4 pb-4 pt-3">
+              <div className="text-[9px] font-mono text-muted tracking-widest mb-2">PRICE HISTORY (7D)</div>
+              <PriceChart marketId={market.id} height={110} showAxes />
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
