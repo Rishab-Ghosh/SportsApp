@@ -5,37 +5,40 @@
 :root {
   color-scheme: dark;
 
-  /* Backgrounds — blue-tinted neutrals, not pure black/gray */
-  --bg-base:       #07090f;
-  --bg-panel:      #0b0f1a;
-  --bg-card:       #0e1420;
-  --bg-card-hover: #131d2e;
+  /* ── Charcoal arena palette — no blue tint ───────────────────── */
+  --bg-base:       #0c0c0c;
+  --bg-panel:      #131313;
+  --bg-card:       #1a1a1a;
+  --bg-card-hover: #202020;
 
-  /* Borders — tinted */
-  --border:        #1a2840;
-  --border-hover:  #2a4266;
+  /* Hard neutral borders */
+  --border:        #282828;
+  --border-hover:  #3a3a3a;
 
-  /* Text */
-  --text-primary:   #dde6f0;
-  --text-secondary: #8ea3bc;
-  --text-muted:     #506070;
+  /* Warm off-white typography */
+  --text-primary:   #ede9e4;
+  --text-secondary: #9c9390;
+  --text-muted:     #524e4b;
 
-  /* Accent palette */
-  --accent:   #38bdf8;
-  --positive: #22c55e;
-  --negative: #f05454;
+  /* ── Sports color palette ────────────────────────────────────── */
+  --brand:    #c0392b;   /* ESPN-style deep red — logo, LIVE, section accents */
+  --accent:   #38bdf8;   /* Sky blue — market odds, probability bars, active UI */
+  --positive: #22c55e;   /* Sportsbook green — YES, win, up */
+  --negative: #e74c3c;   /* Alert red — NO, loss, down */
   --orange:   #f97316;
-  --yellow:   #eab308;
+  --yellow:   #f5c518;
+  --gold:     #c9a227;
 
-  /* Typography */
-  --font-sans: 'Space Grotesk', system-ui, sans-serif;
-  --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
+  /* ── Typography ─────────────────────────────────────────────── */
+  --font-display: 'Barlow Condensed', 'Oswald', sans-serif;
+  --font-sans:    'Space Grotesk', system-ui, sans-serif;
+  --font-mono:    'JetBrains Mono', 'Fira Code', monospace;
 
-  /* Easing — natural deceleration, no bounce */
+  /* ── Easing ──────────────────────────────────────────────────── */
   --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
   --ease-in:  cubic-bezier(0.4, 0, 1, 1);
 
-  /* Legacy aliases used in App.jsx inline styles */
+  /* ── Legacy aliases ──────────────────────────────────────────── */
   --mono: var(--font-mono);
   --red:  var(--negative);
 }
@@ -53,95 +56,116 @@ html, body, #root {
 
 body {
   background-color: var(--bg-base);
+  /* Subtle dot-grid grain — arena jumbotron texture */
+  background-image:
+    radial-gradient(circle at 1px 1px, rgba(255,255,255,0.018) 1px, transparent 0);
+  background-size: 28px 28px;
   color: var(--text-primary);
   font-family: var(--font-sans);
   font-size: 1rem;
   line-height: 1.5;
-  /* Light-on-dark compensation: slightly more open letter-spacing */
   letter-spacing: 0.01em;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* Thin scrollbar */
-::-webkit-scrollbar { width: 4px; height: 4px; }
+/* ── Thin scrollbar ───────────────────────────────────────────── */
+::-webkit-scrollbar { width: 3px; height: 3px; }
 ::-webkit-scrollbar-track { background: var(--bg-base); }
-::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
-::-webkit-scrollbar-thumb:hover { background: var(--accent); }
+::-webkit-scrollbar-thumb { background: var(--border-hover); border-radius: 1px; }
+::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
 .scrollbar-hide::-webkit-scrollbar { display: none; }
 .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
 
-.font-mono {
-  font-family: var(--font-mono);
-}
+.font-mono    { font-family: var(--font-mono); }
+.font-display { font-family: var(--font-display); }
 
-/* ── Skeleton shimmer ─────────────────────────────────────── */
+/* ── Skeleton shimmer ─────────────────────────────────────────── */
 @keyframes skeleton-shimmer {
   0%   { background-position: -200% 0; }
-  100% { background-position: 200% 0; }
+  100% { background-position:  200% 0; }
 }
-
 .skeleton {
   background: linear-gradient(90deg, var(--bg-card) 25%, var(--border) 50%, var(--bg-card) 75%);
   background-size: 200% 100%;
   animation: skeleton-shimmer 1.5s infinite;
 }
 
-/* ── Card entrance — stagger via --card-i CSS custom prop ─── */
+/* ── Card entrance ───────────────────────────────────────────── */
 @keyframes card-in {
-  from { opacity: 0; transform: translateY(8px); }
+  from { opacity: 0; transform: translateY(6px); }
   to   { opacity: 1; transform: translateY(0); }
 }
-
 .card-stagger {
-  animation: card-in 280ms var(--ease-out) both;
-  animation-delay: calc(var(--card-i, 0) * 40ms);
+  animation: card-in 260ms var(--ease-out) both;
+  animation-delay: calc(var(--card-i, 0) * 35ms);
 }
 
-/* ── Tab content cross-fade ───────────────────────────────── */
+/* ── Tab cross-fade ──────────────────────────────────────────── */
 @keyframes tab-fade-in {
-  from { opacity: 0; transform: translateY(4px); }
+  from { opacity: 0; transform: translateY(3px); }
   to   { opacity: 1; transform: translateY(0); }
 }
-
 .tab-content {
-  animation: tab-fade-in 220ms var(--ease-out) both;
+  animation: tab-fade-in 180ms var(--ease-out) both;
 }
 
-/* ── Price flash ──────────────────────────────────────────── */
+/* ── Price flash ─────────────────────────────────────────────── */
 @keyframes flash-up {
-  0%   { background-color: rgba(34, 197, 94, 0.25); }
+  0%   { background-color: rgba(34, 197, 94, 0.22); }
   100% { background-color: transparent; }
 }
 @keyframes flash-down {
-  0%   { background-color: rgba(240, 84, 84, 0.25); }
+  0%   { background-color: rgba(231, 76, 60, 0.22); }
   100% { background-color: transparent; }
 }
-
 .price-flash-up   { animation: flash-up   600ms ease-out; }
 .price-flash-down { animation: flash-down 600ms ease-out; }
 
-/* ── Live glow pulse ──────────────────────────────────────── */
-@keyframes glow-pulse {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(56, 189, 248, 0.15); }
-  50%       { box-shadow: 0 0 0 4px rgba(56, 189, 248, 0.08); }
+/* ── Live dot pulse ──────────────────────────────────────────── */
+@keyframes live-pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.3; }
+}
+.live-dot {
+  animation: live-pulse 1.1s ease-in-out infinite;
 }
 
+/* WS connected glow */
+@keyframes glow-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(56, 189, 248, 0.12); }
+  50%       { box-shadow: 0 0 0 4px rgba(56, 189, 248, 0.06); }
+}
 .live-indicator {
   animation: glow-pulse 2.5s ease-in-out infinite;
 }
 
-/* ── Fade in (generic) ────────────────────────────────────── */
+/* ── Market ticker scroll ─────────────────────────────────────── */
+@keyframes ticker-scroll {
+  from { transform: translateX(0); }
+  to   { transform: translateX(-50%); }
+}
+.ticker-track {
+  display: flex;
+  align-items: center;
+  width: max-content;
+  animation: ticker-scroll 70s linear infinite;
+  will-change: transform;
+}
+.ticker-container:hover .ticker-track {
+  animation-play-state: paused;
+}
+
+/* ── Generic fade-in ─────────────────────────────────────────── */
 @keyframes fade-in {
-  from { opacity: 0; transform: translateY(3px); }
+  from { opacity: 0; transform: translateY(2px); }
   to   { opacity: 1; transform: translateY(0); }
 }
-
 .animate-fade-in {
-  animation: fade-in 200ms var(--ease-out);
+  animation: fade-in 180ms var(--ease-out);
 }
 
-/* ── Reduced motion: kill all animations ─────────────────── */
+/* ── Reduced motion: kill all animations ─────────────────────── */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: 0.01ms !important;

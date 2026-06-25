@@ -3,20 +3,23 @@ import { useApi } from '../hooks/useApi';
 import { useWebSocket } from '../hooks/useWebSocket';
 
 const SPORTS = [
-  { id: 'nba',    label: 'NBA',    icon: '🏀' },
-  { id: 'nfl',    label: 'NFL',    icon: '🏈' },
-  { id: 'mlb',    label: 'MLB',    icon: '⚾' },
-  { id: 'soccer', label: 'Soccer', icon: '⚽' },
-  { id: 'f1',     label: 'F1',     icon: '🏎' },
-  { id: 'tennis', label: 'Tennis', icon: '🎾' },
+  { id: 'nba',    label: 'NBA',    color: '#f97316' },
+  { id: 'nfl',    label: 'NFL',    color: '#22c55e' },
+  { id: 'mlb',    label: 'MLB',    color: '#3b82f6' },
+  { id: 'soccer', label: 'SOCCER', color: '#6366f1' },
+  { id: 'f1',     label: 'F1',     color: '#e74c3c' },
+  { id: 'tennis', label: 'TENNIS', color: '#f5c518' },
 ];
 
 function tokenize(str) {
-  return (str || '').toLowerCase().split(/\W+/).filter(w => w.length >= 4 && !['team', 'city', 'wins', 'game'].includes(w));
+  return (str || '').toLowerCase().split(/\W+/).filter(w => w.length >= 4 && !['team','city','wins','game'].includes(w));
 }
 
 function findWinMarket(game, markets) {
-  const tokens = new Set([...tokenize(game.home || game.home_team), ...tokenize(game.away || game.away_team)]);
+  const tokens = new Set([
+    ...tokenize(game.home || game.home_team),
+    ...tokenize(game.away || game.away_team),
+  ]);
   if (!tokens.size) return null;
   for (const m of markets) {
     const mt = (m.title || '').toLowerCase();
@@ -27,9 +30,8 @@ function findWinMarket(game, markets) {
 
 function fmtTime(iso) {
   if (!iso) return null;
-  try {
-    return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  } catch { return null; }
+  try { return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }); }
+  catch { return null; }
 }
 
 function fmtDate(iso) {
@@ -41,7 +43,7 @@ function fmtDate(iso) {
     const tomorrow = new Date(today);
     tomorrow.setDate(today.getDate() + 1);
     if (d.toDateString() === tomorrow.toDateString()) return 'TOMORROW';
-    return d.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' });
+    return d.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' }).toUpperCase();
   } catch { return null; }
 }
 
@@ -50,48 +52,56 @@ export default function ScoresTab() {
   const wsData = useWebSocket();
   const { data: marketsHttp } = useApi('/api/kalshi/sports-markets');
   const markets = wsData?.markets || marketsHttp?.markets || [];
+  const activeMeta = SPORTS.find(s => s.id === activeSport);
 
   return (
     <div className="tab-content">
-      <div className="flex gap-2 mb-6 overflow-x-auto pb-1 scrollbar-hide">
-        {SPORTS.map(s => (
-          <button
-            key={s.id}
-            onClick={() => setActiveSport(s.id)}
-            className={`flex items-center gap-1.5 px-4 py-1.5 rounded text-sm font-mono font-semibold border transition-all shrink-0 ${
-              activeSport === s.id
-                ? 'bg-accent border-accent text-white'
-                : 'bg-card border-border text-muted hover:text-label hover:border-label'
-            }`}
-          >
-            <span>{s.icon}</span>
-            {s.label}
-          </button>
-        ))}
+      {/* Sport selector */}
+      <div style={{ display: 'flex', gap: 1, marginBottom: 20, overflow: 'auto' }} className="scrollbar-hide">
+        {SPORTS.map(s => {
+          const active = activeSport === s.id;
+          return (
+            <button
+              key={s.id}
+              onClick={() => setActiveSport(s.id)}
+              style={{
+                padding: '5px 14px', flexShrink: 0,
+                background: active ? s.color : 'var(--bg-card)',
+                border: `1px solid ${active ? s.color : 'var(--border)'}`,
+                borderRadius: 2, cursor: 'pointer',
+                color: active ? '#fff' : 'var(--text-muted)',
+                fontFamily: 'var(--font-display)', fontSize: 12, fontWeight: 700,
+                letterSpacing: '0.1em', transition: 'all 0.12s',
+              }}
+              onMouseEnter={e => { if (!active) { e.currentTarget.style.borderColor = 'var(--border-hover)'; e.currentTarget.style.color = 'var(--text-secondary)'; }}}
+              onMouseLeave={e => { if (!active) { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.color = 'var(--text-muted)'; }}}
+            >
+              {s.label}
+            </button>
+          );
+        })}
       </div>
 
-      <ScoreBoard sport={activeSport} markets={markets} />
+      <ScoreBoard sport={activeSport} sportColor={activeMeta?.color} markets={markets} />
     </div>
   );
 }
 
-function ScoreBoard({ sport, markets }) {
+function ScoreBoard({ sport, sportColor, markets }) {
   const { data, loading, error } = useApi(`/api/scores/${sport}`, [sport]);
 
   if (loading) {
     return (
-      <div className="space-y-2">
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         {Array.from({ length: 4 }).map((_, i) => (
-          <div key={i} className="skeleton h-20 rounded" />
+          <div key={i} className="skeleton" style={{ height: 88, borderRadius: 2 }} />
         ))}
       </div>
     );
   }
 
   if (error) {
-    return (
-      <p className="text-muted font-mono text-xs py-8 text-center">SCORES UNAVAILABLE</p>
-    );
+    return <p style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--text-muted)', padding: '32px 0', textAlign: 'center', letterSpacing: '0.08em' }}>SCORES UNAVAILABLE</p>;
   }
 
   const live     = data?.live     || [];
@@ -100,42 +110,41 @@ function ScoreBoard({ sport, markets }) {
 
   if (live.length === 0 && upcoming.length === 0 && final.length === 0) {
     return (
-      <p className="text-muted font-mono text-xs py-12 text-center">
-        NO GAMES SCHEDULED · Check back later
+      <p style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--text-muted)', padding: '48px 0', textAlign: 'center', letterSpacing: '0.08em' }}>
+        NO GAMES SCHEDULED
       </p>
     );
   }
 
-  // F1 uses a flat card layout
   if (sport === 'f1') {
     const all = data?.games || [];
     return (
-      <div className="grid grid-cols-2 xl:grid-cols-3 gap-3">
-        {all.map(g => <F1Card key={g.id} session={g} />)}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8 }}>
+        {all.map(g => <F1Card key={g.id} session={g} sportColor={sportColor} />)}
       </div>
     );
   }
 
   return (
-    <div className="space-y-8">
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
       {live.length > 0 && (
-        <Section label="LIVE NOW" accent>
-          <div className="grid grid-cols-2 xl:grid-cols-3 gap-3">
-            {live.map(g => <LiveCard key={g.id} game={g} markets={markets} />)}
+        <Section label="LIVE NOW" hot>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8 }}>
+            {live.map(g => <LiveCard key={g.id} game={g} markets={markets} sportColor={sportColor} />)}
           </div>
         </Section>
       )}
 
       {upcoming.length > 0 && (
-        <Section label="UPCOMING">
-          <UpcomingList games={upcoming} markets={markets} />
+        <Section label="UPCOMING" sportColor={sportColor}>
+          <UpcomingList games={upcoming} markets={markets} sportColor={sportColor} />
         </Section>
       )}
 
       {final.length > 0 && (
         <Section label="RECENT RESULTS">
-          <div className="grid grid-cols-2 xl:grid-cols-3 gap-3">
-            {final.slice(0, 3).map(g => <FinalCard key={g.id} game={g} markets={markets} />)}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8 }}>
+            {final.slice(0, 6).map(g => <FinalCard key={g.id} game={g} markets={markets} />)}
           </div>
         </Section>
       )}
@@ -145,12 +154,21 @@ function ScoreBoard({ sport, markets }) {
 
 // ── Section header ────────────────────────────────────────────────────────────
 
-function Section({ label, accent, children }) {
+function Section({ label, hot, sportColor, children }) {
+  const accentColor = hot ? 'var(--negative)' : (sportColor || 'var(--text-muted)');
   return (
     <div>
-      <div className={`flex items-center gap-2 mb-3 pb-1.5 border-b ${accent ? 'border-accent/40' : 'border-border'}`}>
-        {accent && <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />}
-        <span className={`text-xs font-mono font-semibold tracking-widest ${accent ? 'text-red-400' : 'text-accent'}`}>
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 7, marginBottom: 10,
+        paddingBottom: 8, borderBottom: `1px solid var(--border)`,
+      }}>
+        {hot && (
+          <span className="live-dot" style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--negative)', flexShrink: 0 }} />
+        )}
+        <span style={{
+          fontFamily: 'var(--font-display)', fontSize: 13, fontWeight: 800,
+          color: accentColor, letterSpacing: '0.12em',
+        }}>
           {label}
         </span>
       </div>
@@ -159,36 +177,72 @@ function Section({ label, accent, children }) {
   );
 }
 
-// ── Live card ─────────────────────────────────────────────────────────────────
+// ── Live card — scoreboard density ────────────────────────────────────────────
 
-function LiveCard({ game, markets }) {
+function LiveCard({ game, markets, sportColor }) {
   const winMarket = useMemo(() => findWinMarket(game, markets), [game, markets]);
-  const home = game.home || game.home_team;
-  const away = game.away || game.away_team;
+  const home = game.home || game.home_team || '—';
+  const away = game.away || game.away_team || '—';
   const homeScore = game.homeScore ?? game.home_score;
   const awayScore = game.awayScore ?? game.away_score;
 
   return (
-    <div className="bg-card border border-accent/40 rounded p-4 live-indicator">
-      <div className="flex items-center gap-1.5 mb-2">
-        <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
-        <span className="text-[9px] font-mono text-red-400 font-bold tracking-widest">LIVE</span>
-        {game.clock && <span className="text-[9px] font-mono text-muted ml-1">{game.clock}</span>}
+    <div style={{
+      background: 'var(--bg-card)',
+      border: `1px solid var(--border)`,
+      borderTop: `2px solid ${sportColor || 'var(--negative)'}`,
+      borderRadius: 2,
+      overflow: 'hidden',
+    }}>
+      {/* LIVE header */}
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 5,
+        padding: '5px 10px',
+        background: 'rgba(231,76,60,0.08)',
+        borderBottom: '1px solid var(--border)',
+      }}>
+        <span className="live-dot" style={{ width: 5, height: 5, borderRadius: '50%', background: 'var(--negative)' }} />
+        <span style={{ fontFamily: 'var(--font-display)', fontSize: 10, fontWeight: 800, color: 'var(--negative)', letterSpacing: '0.14em' }}>
+          LIVE
+        </span>
+        {game.clock && (
+          <span style={{ fontFamily: 'var(--mono)', fontSize: 9, color: 'var(--text-muted)', marginLeft: 2 }}>
+            {game.clock}
+          </span>
+        )}
+        {game.broadcast && (
+          <span style={{ marginLeft: 'auto', fontFamily: 'var(--mono)', fontSize: 8, color: 'var(--text-muted)' }}>
+            {game.broadcast}
+          </span>
+        )}
       </div>
 
-      <div className="flex justify-between items-center mb-1">
-        <span className="text-sm text-gray-200 truncate flex-1">{away}</span>
-        <span className="font-mono font-bold text-lg ml-2 tabular-nums text-gray-100">{awayScore}</span>
+      {/* Scoreboard rows */}
+      <div style={{ padding: '8px 10px' }}>
+        {[{ team: away, score: awayScore }, { team: home, score: homeScore }].map(({ team, score }, i) => (
+          <React.Fragment key={i}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '3px 0' }}>
+              <span style={{
+                fontFamily: 'var(--font-display)', fontSize: 14, fontWeight: 700,
+                color: 'var(--text-primary)', letterSpacing: '0.02em',
+                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                maxWidth: '72%', textTransform: 'uppercase',
+              }}>
+                {team}
+              </span>
+              <span style={{
+                fontFamily: 'var(--mono)', fontSize: 18, fontWeight: 700,
+                color: 'var(--text-primary)', letterSpacing: '-0.02em',
+              }}>
+                {score != null ? score : '—'}
+              </span>
+            </div>
+            {i === 0 && (
+              <div style={{ height: 1, background: 'var(--border)', margin: '2px 0' }} />
+            )}
+          </React.Fragment>
+        ))}
       </div>
-      <div className="border-t border-border my-1.5" />
-      <div className="flex justify-between items-center">
-        <span className="text-sm text-gray-200 truncate flex-1">{home}</span>
-        <span className="font-mono font-bold text-lg ml-2 tabular-nums text-gray-100">{homeScore}</span>
-      </div>
-
-      {game.broadcast && (
-        <div className="mt-2 text-[9px] font-mono text-muted">{game.broadcast}</div>
-      )}
 
       {winMarket && <WinProbRow market={winMarket} />}
     </div>
@@ -197,61 +251,91 @@ function LiveCard({ game, markets }) {
 
 // ── Upcoming list ─────────────────────────────────────────────────────────────
 
-function UpcomingList({ games, markets }) {
+function UpcomingList({ games, markets, sportColor }) {
   const [showAll, setShowAll] = useState(false);
-  const MAX = 6;
+  const MAX = 8;
   const shown = showAll ? games : games.slice(0, MAX);
 
   return (
     <div>
-      <div className="space-y-2">
-        {shown.map(g => <UpcomingCard key={g.id} game={g} markets={markets} />)}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+        {shown.map(g => <UpcomingCard key={g.id} game={g} markets={markets} sportColor={sportColor} />)}
       </div>
       {games.length > MAX && !showAll && (
         <button
           onClick={() => setShowAll(true)}
-          className="mt-3 text-xs font-mono text-accent hover:text-white transition-colors"
+          style={{
+            marginTop: 10, background: 'none', border: 'none', cursor: 'pointer',
+            fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--accent)',
+            letterSpacing: '0.06em',
+          }}
         >
-          Show {games.length - MAX} more →
+          SHOW {games.length - MAX} MORE →
         </button>
       )}
     </div>
   );
 }
 
-function UpcomingCard({ game, markets }) {
+function UpcomingCard({ game, markets, sportColor }) {
   const winMarket = useMemo(() => findWinMarket(game, markets), [game, markets]);
-  const home = game.home || game.home_team;
-  const away = game.away || game.away_team;
+  const home = game.home || game.home_team || '—';
+  const away = game.away || game.away_team || '—';
   const startIso = game.startTime || game.start_time;
   const dayLabel = fmtDate(startIso);
   const timeLabel = fmtTime(startIso);
-  const sport = (game.sport || '').toUpperCase();
 
   return (
-    <div className="bg-card border border-border rounded p-3 hover:border-border-hover transition-colors">
-      <div className="flex items-center justify-between mb-1.5">
-        <div className="flex items-center gap-2">
-          {dayLabel && <span className="text-[9px] font-mono text-muted">{dayLabel}</span>}
-          {timeLabel && <span className="text-[10px] font-mono text-label font-semibold">{timeLabel}</span>}
-        </div>
-        {sport && (
-          <span className="text-[9px] font-mono text-muted border border-border rounded px-1.5 py-0.5">{sport}</span>
+    <div style={{
+      display: 'flex', alignItems: 'stretch',
+      background: 'var(--bg-card)', border: '1px solid var(--border)',
+      borderRadius: 2, overflow: 'hidden',
+    }}
+    onMouseEnter={e => e.currentTarget.style.borderColor = 'var(--border-hover)'}
+    onMouseLeave={e => e.currentTarget.style.borderColor = 'var(--border)'}
+    >
+      {/* Time column */}
+      <div style={{
+        width: 56, flexShrink: 0, display: 'flex', flexDirection: 'column',
+        alignItems: 'center', justifyContent: 'center',
+        padding: '8px 4px', borderRight: '1px solid var(--border)',
+        background: 'rgba(255,255,255,0.015)',
+      }}>
+        {timeLabel && (
+          <span style={{ fontFamily: 'var(--mono)', fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)' }}>
+            {timeLabel}
+          </span>
+        )}
+        {dayLabel && (
+          <span style={{ fontFamily: 'var(--font-display)', fontSize: 9, fontWeight: 700, color: 'var(--text-muted)', letterSpacing: '0.1em', marginTop: 2 }}>
+            {dayLabel}
+          </span>
         )}
       </div>
 
-      <div className="text-sm text-gray-200 truncate">{away}</div>
-      <div className="text-sm text-gray-200 truncate">{home}</div>
-
-      {game.broadcast && (
-        <div className="mt-1.5 text-[9px] font-mono text-muted">{game.broadcast}</div>
-      )}
-
-      {winMarket && (
-        <div className="mt-2 pt-1.5 border-t border-border">
-          <span className="text-[9px] font-mono text-positive">Kalshi YES {winMarket.yes_price}¢</span>
+      {/* Teams */}
+      <div style={{ flex: 1, padding: '7px 10px' }}>
+        <div style={{ fontFamily: 'var(--font-display)', fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', letterSpacing: '0.02em', textTransform: 'uppercase' }}>
+          {away}
         </div>
-      )}
+        <div style={{ height: 1, background: 'var(--border)', margin: '3px 0' }} />
+        <div style={{ fontFamily: 'var(--font-display)', fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', letterSpacing: '0.02em', textTransform: 'uppercase' }}>
+          {home}
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 5 }}>
+          {game.broadcast && (
+            <span style={{ fontFamily: 'var(--mono)', fontSize: 8, color: 'var(--text-muted)', letterSpacing: '0.06em' }}>
+              {game.broadcast}
+            </span>
+          )}
+          {winMarket && (
+            <span style={{ fontFamily: 'var(--mono)', fontSize: 9, color: 'var(--positive)', marginLeft: 'auto' }}>
+              YES {winMarket.yes_price}¢
+            </span>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
@@ -260,25 +344,52 @@ function UpcomingCard({ game, markets }) {
 
 function FinalCard({ game, markets }) {
   const winMarket = useMemo(() => findWinMarket(game, markets), [game, markets]);
-  const home = game.home || game.home_team;
-  const away = game.away || game.away_team;
+  const home = game.home || game.home_team || '—';
+  const away = game.away || game.away_team || '—';
   const homeScore = parseInt(game.homeScore ?? game.home_score) || 0;
   const awayScore = parseInt(game.awayScore ?? game.away_score) || 0;
   const homeWin = homeScore > awayScore;
   const awayWin = awayScore > homeScore;
 
   return (
-    <div className="bg-card border border-border rounded p-4 opacity-70">
-      <div className="text-[9px] font-mono text-muted mb-2 tracking-widest">FINAL</div>
-
-      <div className={`flex justify-between items-center mb-1 ${!awayWin ? 'opacity-50' : ''}`}>
-        <span className={`text-sm truncate flex-1 ${awayWin ? 'text-white font-semibold' : 'text-gray-400'}`}>{away}</span>
-        <span className={`font-mono font-bold text-lg ml-2 tabular-nums ${awayWin ? 'text-positive' : 'text-gray-400'}`}>{awayScore}</span>
+    <div style={{
+      background: 'var(--bg-card)', border: '1px solid var(--border)',
+      borderRadius: 2, overflow: 'hidden', opacity: 0.75,
+    }}>
+      <div style={{
+        padding: '4px 10px', borderBottom: '1px solid var(--border)',
+        background: 'rgba(255,255,255,0.02)',
+      }}>
+        <span style={{ fontFamily: 'var(--font-display)', fontSize: 9, fontWeight: 800, color: 'var(--text-muted)', letterSpacing: '0.14em' }}>
+          FINAL
+        </span>
       </div>
-      <div className="border-t border-border my-1.5" />
-      <div className={`flex justify-between items-center ${!homeWin ? 'opacity-50' : ''}`}>
-        <span className={`text-sm truncate flex-1 ${homeWin ? 'text-white font-semibold' : 'text-gray-400'}`}>{home}</span>
-        <span className={`font-mono font-bold text-lg ml-2 tabular-nums ${homeWin ? 'text-positive' : 'text-gray-400'}`}>{homeScore}</span>
+
+      <div style={{ padding: '8px 10px' }}>
+        {[{ team: away, score: awayScore, win: awayWin }, { team: home, score: homeScore, win: homeWin }].map(({ team, score, win }, i) => (
+          <React.Fragment key={i}>
+            <div style={{
+              display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+              padding: '2px 0', opacity: win ? 1 : 0.45,
+            }}>
+              <span style={{
+                fontFamily: 'var(--font-display)', fontSize: 13, fontWeight: win ? 800 : 600,
+                color: win ? 'var(--text-primary)' : 'var(--text-secondary)',
+                letterSpacing: '0.02em', textTransform: 'uppercase',
+                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '72%',
+              }}>
+                {team}
+              </span>
+              <span style={{
+                fontFamily: 'var(--mono)', fontSize: 16, fontWeight: 700,
+                color: win ? 'var(--positive)' : 'var(--text-muted)',
+              }}>
+                {score}
+              </span>
+            </div>
+            {i === 0 && <div style={{ height: 1, background: 'var(--border)', margin: '2px 0' }} />}
+          </React.Fragment>
+        ))}
       </div>
 
       {winMarket && <WinProbRow market={winMarket} />}
@@ -286,54 +397,73 @@ function FinalCard({ game, markets }) {
   );
 }
 
-// ── Kalshi row ────────────────────────────────────────────────────────────────
+// ── Kalshi market probability row ─────────────────────────────────────────────
 
 function WinProbRow({ market }) {
   const yes = market.yes_price ?? 50;
-  const no  = market.no_price  ?? (100 - yes);
   return (
-    <div className="mt-2 pt-2 border-t border-accent/20">
-      <div className="text-[9px] font-mono text-accent tracking-widest mb-1">KALSHI MARKET ODDS</div>
-      <div className="flex h-1.5 rounded overflow-hidden gap-px mb-1">
-        <div className="bg-positive" style={{ width: `${yes}%` }} />
-        <div className="bg-negative" style={{ width: `${Math.max(0, 100 - yes)}%` }} />
+    <div style={{
+      padding: '5px 10px 7px',
+      borderTop: '1px solid var(--border)',
+      background: 'rgba(56,189,248,0.04)',
+    }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+        <span style={{ fontFamily: 'var(--font-display)', fontSize: 9, fontWeight: 700, color: 'var(--accent)', letterSpacing: '0.12em' }}>
+          KALSHI ODDS
+        </span>
+        <span style={{ fontFamily: 'var(--mono)', fontSize: 9, color: 'var(--text-muted)', maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {market.title?.slice(0, 22)}
+        </span>
       </div>
-      <div className="flex justify-between text-[9px] font-mono">
-        <span className="text-positive">YES {yes}¢</span>
-        <span className="text-muted truncate mx-2 flex-1 text-center" title={market.title}>{market.title?.slice(0, 28)}…</span>
-        <span className="text-negative">NO {no}¢</span>
+      <div style={{ height: 3, background: 'var(--border)', borderRadius: 1, overflow: 'hidden', marginBottom: 4 }}>
+        <div style={{ display: 'flex', height: '100%' }}>
+          <div style={{ width: `${yes}%`, background: 'var(--positive)' }} />
+          <div style={{ flex: 1, background: 'var(--negative)' }} />
+        </div>
+      </div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', fontFamily: 'var(--mono)', fontSize: 9 }}>
+        <span style={{ color: 'var(--positive)', fontWeight: 700 }}>YES {yes}¢</span>
+        <span style={{ color: 'var(--negative)', fontWeight: 700 }}>NO {100 - yes}¢</span>
       </div>
     </div>
   );
 }
 
-// ── F1 card (special layout) ──────────────────────────────────────────────────
+// ── F1 card ───────────────────────────────────────────────────────────────────
 
-function F1Card({ session }) {
-  const startDate = session.startTime || session.start_time ? new Date(session.startTime || session.start_time) : null;
+function F1Card({ session, sportColor }) {
+  const startDate = session.startTime || session.start_time
+    ? new Date(session.startTime || session.start_time)
+    : null;
   const status = session.status || (session.isLive ? 'live' : session.isFinal ? 'final' : 'upcoming');
 
   return (
-    <div className={`bg-card border rounded p-4 ${status === 'live' ? 'border-accent/50 live-indicator' : 'border-border'}`}>
-      <div className="flex items-start justify-between mb-3">
+    <div style={{
+      background: 'var(--bg-card)', border: '1px solid var(--border)',
+      borderTop: status === 'live' ? `2px solid ${sportColor || 'var(--negative)'}` : '1px solid var(--border)',
+      borderRadius: 2, overflow: 'hidden', padding: '10px 12px',
+    }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
         <div>
-          <div className="text-[10px] font-mono text-muted mb-0.5">FORMULA 1 · 2026</div>
-          <p className="text-sm font-semibold text-gray-100 leading-snug">{session.home || session.name}</p>
+          <div style={{ fontFamily: 'var(--font-display)', fontSize: 9, fontWeight: 700, color: 'var(--text-muted)', letterSpacing: '0.12em', marginBottom: 3 }}>
+            FORMULA 1 · 2026
+          </div>
+          <p style={{ fontFamily: 'var(--font-display)', fontSize: 15, fontWeight: 700, color: 'var(--text-primary)', letterSpacing: '0.02em' }}>
+            {session.home || session.name}
+          </p>
         </div>
         <StatusPill status={status} />
       </div>
 
       {session.venue && (
-        <div className="flex items-center gap-1.5 text-[11px] font-mono text-muted mt-2">
-          <span>🏁</span>
-          <span>{session.venue}</span>
-          {session.country && <span>· {session.country}</span>}
+        <div style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--text-muted)', marginTop: 6 }}>
+          🏁 {session.venue}{session.country ? ` · ${session.country}` : ''}
         </div>
       )}
 
       {startDate && (
-        <div className="mt-2 text-[10px] font-mono text-muted">
-          {startDate.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
+        <div style={{ fontFamily: 'var(--mono)', fontSize: 9, color: 'var(--text-muted)', marginTop: 4, letterSpacing: '0.04em' }}>
+          {startDate.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }).toUpperCase()}
           {' · '}
           {startDate.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true })}
         </div>
@@ -343,9 +473,20 @@ function F1Card({ session }) {
 }
 
 function StatusPill({ status }) {
-  if (status === 'live')
-    return <span className="text-[9px] font-mono font-bold text-positive border border-positive/40 bg-positive/10 rounded px-1.5 py-0.5 tracking-widest">LIVE</span>;
-  if (status === 'final')
-    return <span className="text-[9px] font-mono font-bold text-muted border border-muted/40 bg-muted/10 rounded px-1.5 py-0.5 tracking-widest">FINAL</span>;
-  return <span className="text-[9px] font-mono font-bold text-accent border border-accent/40 bg-accent/10 rounded px-1.5 py-0.5 tracking-widest">SCHED</span>;
+  const styles = {
+    live:     { color: 'var(--negative)', border: 'rgba(231,76,60,0.4)',  bg: 'rgba(231,76,60,0.1)',  label: 'LIVE' },
+    final:    { color: 'var(--text-muted)', border: 'rgba(82,78,75,0.4)', bg: 'rgba(82,78,75,0.1)',  label: 'FINAL' },
+    upcoming: { color: 'var(--accent)',    border: 'rgba(56,189,248,0.35)', bg: 'rgba(56,189,248,0.08)', label: 'SCHED' },
+  };
+  const s = styles[status] || styles.upcoming;
+  return (
+    <span style={{
+      fontFamily: 'var(--font-display)', fontSize: 9, fontWeight: 800,
+      letterSpacing: '0.12em', color: s.color,
+      border: `1px solid ${s.border}`, background: s.bg,
+      borderRadius: 2, padding: '2px 6px',
+    }}>
+      {s.label}
+    </span>
+  );
 }
