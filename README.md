@@ -1,6 +1,6 @@
 # SportsPulse
 
-A Bloomberg Terminal-style sports intelligence dashboard. Real-time Kalshi prediction markets, live ESPN scores, multi-source scraped sports news, AI-powered story clustering, and a dynamic Heat Score engine — all in a dark, dense, three-panel terminal interface with WebSocket live updates.
+Basically the idea is for me to follow sports more easily than I have in the past, currently working on building performance in order to find market gaps and arbitrage oppertunities in the sports betting space. 
 
 ![Dashboard](./screenshot.png)
 
